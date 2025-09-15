@@ -574,11 +574,12 @@ class AltDiffusionModel(BaseModel):
         try:
             from flagai.auto_model.auto_loader import AutoLoader
             from flagai.model.predictor.predictor import Predictor
+            
         except ImportError:
             raise ImportError("FlagAI is required for AltDiffusion model. Please install it with: pip install flagai")
         
         self.load_local_config()
-        self.model_dir = self.get_model_path("/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/", "ALTDIFFUSION_MODEL_PATH")
+        self.model_dir = self.get_model_path("./data/checkpoints/", "ALTDIFFUSION_MODEL_PATH")
         
         self.loader = AutoLoader(
             task_name="text2img", 

@@ -13,7 +13,7 @@ AVAILABLE_Model = {
     'sana': 'text_to_image_models.SanaModel', 
     'sd35': 'text_to_image_models.SD35Model', 
     'flux': 'text_to_image_models.FLUXModel', 
-    'janus': 'text_to_image_models.JanusModel',
+    'janus': 'text_to_image_models.JanusProModel',
     'janus_flow': 'text_to_image_models.JanusFlowModel',
     'sd15': 'text_to_image_models.SD15Model',
     # SD1.5 models after RL by DDPO

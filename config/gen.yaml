@@ -5,4 +5,4 @@ prompt_path: "/home/muzammal/Projects/TRIG/dataset/TRIG-multilingual/text-to-ima
 start_idx: 0
 end_idx: 30000
 generation:
-  models: ["mulan"]
+  models: ["altdiffusion"]
