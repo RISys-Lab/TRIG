@@ -566,6 +566,60 @@ class JanusProModel(BaseModel):
         image = self.janus_generate(self.vl_gpt, self.vl_chat_processor, prompt)
         return image
 
+class QwenImageModel(BaseModel):
+    """
+    Qwen-Image Model
+    """
+    def __init__(self):
+        super().__init__()
+        self.model_name = "Qwen-Image"
+        
+        try:
+            from diffusers import DiffusionPipeline
+        except ImportError:
+            raise ImportError("diffusers is required for QwenImageModel. Please install it with: pip install diffusers")
+        
+        self.load_local_config()
+        
+        # 模型配置
+        self.default_model_id = "Qwen/Qwen-Image"
+        self.torch_dtype = torch.bfloat16
+        
+        # 获取模型路径（配置文件或HuggingFace）
+        model_path = self.get_model_path(self.default_model_id, "QWEN_IMAGE_MODEL_PATH")
+        
+        # 加载模型
+        self.pipe = DiffusionPipeline.from_pretrained(model_path, torch_dtype=self.torch_dtype)
+        self.pipe = self.pipe.to(device)
+        
+        
+        # 正向和负向提示词（如果需要的话）
+        self.positive_magic = {"en": ""}  # 可以根据需要添加正向魔法词
+        self.negative_prompt = ""  # 可以根据需要添加负向提示词
+
+    def generate(self, prompt):
+        try:
+            
+            # 构建完整的提示词
+            full_prompt = prompt + self.positive_magic["en"]
+            
+            # 生成图像
+            image = self.pipe(
+                prompt=full_prompt,
+                negative_prompt=self.negative_prompt,
+                width=1024,
+                height=1024,
+                num_inference_steps=50,
+                true_cfg_scale=4.0,
+                generator=torch.Generator(device=device).manual_seed(42)
+            ).images[0]
+            
+            return image
+            
+        except Exception as e:
+            print(f"Error generating image with {self.model_name}: {e}")
+            return None
+
 class AltDiffusionModel(BaseModel):
     def __init__(self):
         super().__init__()

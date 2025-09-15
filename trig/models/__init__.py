@@ -16,6 +16,7 @@ AVAILABLE_Model = {
     'janus': 'text_to_image_models.JanusProModel',
     'janus_flow': 'text_to_image_models.JanusFlowModel',
     'sd15': 'text_to_image_models.SD15Model',
+    'qwen_image': 'text_to_image_models.QwenImageModel',
     # SD1.5 models after RL by DDPO
     'sd15_ddpo': 'text_to_image_models.SD15DDPOModel',
     # FLUX models after LoRA FT
