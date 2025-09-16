@@ -2,10 +2,10 @@ from huggingface_hub import HfApi
 
 api = HfApi()
 api.upload_file(
-    path_in_repo="text-to-image-multilingual.json", 
-    path_or_fileobj="/home/muzammal/Projects/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json",  
-    repo_id="TRIG-bench/TRIG-multilingual", 
-    repo_type="dataset" 
+    path_in_repo="pytorch_lora_weights.safetensors", 
+    path_or_fileobj="/home/muzammal/Projects/TRIG/trig/ft/flux_ft/pytorch_lora_weights.safetensors",  
+    repo_id="TRIG-bench/FLUX_FT_LoRA_TRIG_epoch10", 
+    repo_type="model" 
 )
 
 # from huggingface_hub import hf_hub_download

@@ -620,6 +620,85 @@ class QwenImageModel(BaseModel):
             print(f"Error generating image with {self.model_name}: {e}")
             return None
 
+class HunyuanModel(BaseModel):
+    """
+    HunyuanImage Model from Tencent
+    Supports hunyuanimage-v2.1 and hunyuanimage-v2.1-distilled
+    """
+    def __init__(self):
+        super().__init__()
+        self.model_name = "HunyuanImage"
+        
+        # 设置CUDA内存配置
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+        
+        try:
+            from hyimage.diffusion.pipelines.hunyuanimage_pipeline import HunyuanImagePipeline
+        except ImportError:
+            raise ImportError("hyimage is required for HunyuanModel. Please install it with: pip install hyimage")
+        
+        self.load_local_config()
+        
+        # 模型配置 - 支持两个版本
+        self.default_model_name = "hunyuanimage-v2.1"  # 或 "hunyuanimage-v2.1-distilled"
+        
+        # 获取模型路径（配置文件或默认）
+        model_path = self.get_model_path(self.default_model_name, "HUNYUAN_MODEL_PATH")
+        
+        # 如果获取到的是本地路径，设置环境变量
+        if model_path != self.default_model_name and os.path.exists(model_path):
+            # 本地路径存在，设置环境变量
+            os.environ['HUNYUANIMAGE_V2_1_MODEL_ROOT'] = model_path
+            print(f"Setting HUNYUANIMAGE_V2_1_MODEL_ROOT to: {model_path}")
+            model_name = self.default_model_name  # 使用默认模型名称
+        else:
+            # 使用HuggingFace或默认名称
+            model_name = model_path
+        
+        # 加载模型
+        self.pipe = HunyuanImagePipeline.from_pretrained(model_name=model_name, use_fp8=True)
+        self.pipe = self.pipe.to(device)
+        
+        # 保存模型名称用于后续判断
+        self.current_model_name = model_name
+        
+        # 支持的分辨率配置
+        self.supported_resolutions = {
+            "16:9": {"width": 2560, "height": 1536},
+            "4:3": {"width": 2304, "height": 1792},
+            "1:1": {"width": 2048, "height": 2048},
+            "3:4": {"width": 1792, "height": 2304},
+            "9:16": {"width": 1536, "height": 2560}
+        }
+
+    def generate(self, prompt):
+        try:
+            
+            # 根据模型类型设置参数
+            is_distilled = "distilled" in self.current_model_name
+            num_inference_steps = 8 if is_distilled else 50
+            guidance_scale = 3.25 if is_distilled else 3.5
+            shift = 4 if is_distilled else 5
+            
+            # 生成图像
+            image = self.pipe(
+                prompt=prompt,
+                width=2048,
+                height=2048,
+                use_reprompt=False,
+                use_refiner=True,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                shift=shift,
+                seed=42,
+            )
+            
+            return image
+            
+        except Exception as e:
+            print(f"Error generating image with {self.model_name}: {e}")
+            return None
+
 class AltDiffusionModel(BaseModel):
     def __init__(self):
         super().__init__()
