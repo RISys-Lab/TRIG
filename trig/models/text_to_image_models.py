@@ -632,10 +632,7 @@ class HunyuanModel(BaseModel):
         # 设置CUDA内存配置
         os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
         
-        try:
-            from hyimage.diffusion.pipelines.hunyuanimage_pipeline import HunyuanImagePipeline
-        except ImportError:
-            raise ImportError("hyimage is required for HunyuanModel. Please install it with: pip install hyimage")
+        from hyimage.diffusion.pipelines.hunyuanimage_pipeline import HunyuanImagePipeline
         
         self.load_local_config()
         
