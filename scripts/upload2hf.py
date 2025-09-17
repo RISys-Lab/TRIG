@@ -2,10 +2,10 @@ from huggingface_hub import HfApi
 
 api = HfApi()
 api.upload_file(
-    path_in_repo="pytorch_lora_weights.safetensors", 
-    path_or_fileobj="/home/muzammal/Projects/TRIG/trig/ft/flux_ft/pytorch_lora_weights.safetensors",  
-    repo_id="TRIG-bench/FLUX_FT_LoRA_TRIG_epoch10", 
-    repo_type="model" 
+    path_in_repo="output/t2i_ml/mulan.zip", 
+    path_or_fileobj="/home/muzammal/Projects/TRIG/data/output/t2i_ml/mulan.zip",  
+    repo_id="TRIG-bench/TRIG_multilingual_output_images", 
+    repo_type="dataset" 
 )
 
 # from huggingface_hub import hf_hub_download
