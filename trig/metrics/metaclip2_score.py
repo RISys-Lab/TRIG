@@ -26,7 +26,7 @@ def _load_image(path: str) -> Image.Image:
 class MetaCLIP2Embedder:
     def __init__(
         self,
-        model_name: str = "facebook/metaclip-2-worldwide-huge-quickgelu",
+        model_name: str = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/metaclip-2-worldwide-huge-quickgelu",
         device: str = "cuda",
         use_bf16: bool = True,
         trust_remote_code: bool = False,
@@ -141,10 +141,10 @@ if __name__ == "__main__":
     )
 
     # 保存到 CSV：第一列 id，第二列 score（四位小数）
-    with open("metaclip2_scores.csv", "w", newline="", encoding="utf-8") as f:
+    with open("metaclip2_sd35.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["data_id", "score"])  # 表头
         for did, sc in scores.items():
             writer.writerow([did, f"{sc:.4f}"])
 
-    print("CSV 已保存: metaclip2_scores.csv")
+    print("CSV saved metaclip2_sd35.csv")
