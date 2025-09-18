@@ -6,6 +6,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 import csv   # 新增
+from tqdm import tqdm  # 新增进度条
 
 # ----------------------------
 # 工具函数
@@ -61,12 +62,12 @@ class MetaCLIP2Embedder:
                 img_inputs = {k: v.to(self.device) for k, v in img_inputs.items()}
                 img_feats = self.model.get_image_features(**img_inputs)
 
-                txt_inputs = self.processor(text=texts, padding=True, return_tensors="pt")
+                txt_inputs = self.processor(text=texts, padding=True, truncation=True, max_length=77, return_tensors="pt")
                 txt_inputs = {k: v.to(self.device) for k, v in txt_inputs.items()}
                 txt_feats = self.model.get_text_features(**txt_inputs)
         else:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast_enabled):
-                inputs = self.processor(images=images, text=texts, padding=True, return_tensors="pt")
+                inputs = self.processor(images=images, text=texts, padding=True, truncation=True, max_length=77, return_tensors="pt")
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 outputs = self.model(**inputs)
                 img_feats = outputs.image_embeds
@@ -85,8 +86,10 @@ def process_images_with_prompts_metaclip2(
     use_bf16: bool = True,
     trust_remote_code: bool = False,
 ) -> dict:
+
     with open(json_path, "r", encoding="utf-8") as f:
         items = json.load(f)
+    print(f"[MetaCLIP2] loaded {len(items)} items")
 
     samples = []
     for it in items:
@@ -98,13 +101,21 @@ def process_images_with_prompts_metaclip2(
         else:
             print(f"[warn] image not found: {img_path}")
 
+    print(f"[MetaCLIP2] processed {len(samples)} samples")
+    print(f"[MetaCLIP2] processing with batch size {batch_size}")
+    print(f"[MetaCLIP2] device = {device}")
+
+    print(f"[MetaCLIP2] loading embedder")
     embedder = MetaCLIP2Embedder(device=device, use_bf16=use_bf16, trust_remote_code=trust_remote_code)
 
     results: dict[str, float] = {}
     total = len(samples)
     num_batches = (total + batch_size - 1) // batch_size
 
-    for i in range(0, total, batch_size):
+    # 创建进度条
+    pbar = tqdm(range(0, total, batch_size), desc="Processing batches", unit="batch")
+    
+    for i in pbar:
         batch = samples[i:i + batch_size]
         images = [_load_image(x["img_path"]) for x in batch]
         texts  = [x["prompt"] for x in batch]
@@ -120,7 +131,11 @@ def process_images_with_prompts_metaclip2(
         for did, sc in zip(ids, scores):
             results[did] = float(sc)
 
-        print(f"[MetaCLIP2] processed batch {(i // batch_size) + 1}/{num_batches} ({len(batch)} samples)")
+        # 更新进度条描述信息
+        pbar.set_postfix({
+            'batch': f"{(i // batch_size) + 1}/{num_batches}",
+            'samples': len(batch),
+        })
 
     return results
 
