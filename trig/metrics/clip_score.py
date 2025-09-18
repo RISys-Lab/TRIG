@@ -7,19 +7,6 @@ import clip
 from clipscore_main.clipscore import extract_all_images, extract_all_captions
 
 def process_images_with_prompts(image_folder, json_path, batch_size=100, device='cuda'):
-    """
-    遍历图片文件夹，并从 JSON 文件中读取 prompt 数据，然后批量计算 CLIPScore。
-    
-    Args:
-        image_folder (str): 图片所在的文件夹路径，图片文件名应为 "{data_id}.png"
-        json_path (str): JSON 文件路径，文件中每个条目应包含 'data_id' 和 'prompt' 键
-        batch_size (int): 每个批次的处理数量
-        device (str): 计算设备（如 'cuda' 或 'cpu'）
-        
-    Returns:
-        dict: 每个 data_id 对应的 CLIPScore 结果，形式为 {data_id: score, ...}
-    """
-    # 根据设备情况选择设备
     device = device if torch.cuda.is_available() else "cpu"
     print(f"使用设备: {device}")
     
