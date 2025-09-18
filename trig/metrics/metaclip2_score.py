@@ -143,7 +143,7 @@ def process_images_with_prompts_metaclip2(
 # 示例入口
 # ----------------------------
 if __name__ == "__main__":
-    image_folder = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/sd35"
+    image_folder = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/sana"
     json_path = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json"
 
     scores = process_images_with_prompts_metaclip2(
@@ -156,10 +156,10 @@ if __name__ == "__main__":
     )
 
     # 保存到 CSV：第一列 id，第二列 score（四位小数）
-    with open("metaclip2_sd35.csv", "w", newline="", encoding="utf-8") as f:
+    with open("/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/result/metaclip2_sana.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["data_id", "score"])  # 表头
         for did, sc in scores.items():
             writer.writerow([did, f"{sc:.4f}"])
 
-    print("CSV saved metaclip2_sd35.csv")
+    print("CSV saved")
