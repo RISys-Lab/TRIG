@@ -826,6 +826,7 @@ class PEADiffusionModel(BaseModel):
         print(f"PEADiffusion model loaded successfully on {device}")
 
     def generate(self, prompt, **kwargs):
+        from diffusers import FluxPipeline, AutoencoderKL
         try:
             with torch.no_grad():
                 # 文本编码
@@ -908,6 +909,186 @@ class MuLanModel(BaseModel):
         except Exception as e:
             print(f"Error generating image with {self.model_name}: {e}")
             return None
+
+class X2IModel(BaseModel):
+    def __init__(self):
+        super().__init__()
+        self.model_name = "X2I"
+        self.qwen_id = "Qwen/Qwen2.5-VL-7B-Instruct"
+        self.qwen_proj_path = "diffusion_pytorch_model.bin"
+        self.flux_path = "black-forest-labs/FLUX.1-schnell"
+        
+        # 加载配置文件
+        self.load_local_config()
+        
+        # 获取模型路径（配置文件或HuggingFace）
+        qwen_path = self.get_model_path(self.qwen_id, "X2I_QWEN_MODEL_PATH")
+        qwen_proj_path = self.get_model_path(self.qwen_proj_path, "X2I_QWEN_PROJ_PATH")
+        flux_path = self.get_model_path(self.flux_path, "X2I_FLUX_MODEL_PATH")
+        try:
+            from diffusers import FluxPipeline, AutoencoderKL
+            from diffusers.image_processor import VaeImageProcessor
+            from transformers import T5EncoderModel, T5TokenizerFast, CLIPTokenizer, CLIPTextModel, T5Config
+            from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM, AutoProcessor, Qwen2_5_VLForConditionalGeneration
+            from trig.models.X2I.utils.proj import create_proj3_qwen3b, create_proj3_qwen7b
+            from qwen_vl_utils import process_vision_info
+        except ImportError:
+            raise ImportError("Required packages not available. Please install diffusers and transformers")
+        
+        self.dtype = torch.bfloat16
+        torch.cuda.set_device(device)
+        self.qwen_encoder = Qwen2_5_VLForConditionalGeneration.from_pretrained(qwen_path, torch_dtype=torch.bfloat16).eval().to(device=device)
+        self.qwen_processor = AutoProcessor.from_pretrained(qwen_path)
+
+        self.clip_tokenizer = CLIPTokenizer.from_pretrained(flux_path, subfolder="tokenizer", torch_dtype=self.dtype)
+        self.t5_tokenizer = T5TokenizerFast.from_pretrained(flux_path, subfolder="tokenizer_2", torch_dtype=self.dtype)
+        self.clip_model = CLIPTextModel.from_pretrained(flux_path, subfolder="text_encoder", torch_dtype=self.dtype).to(device).eval()
+        self.t5_model = T5EncoderModel.from_pretrained(flux_path, subfolder="text_encoder_2", torch_dtype=self.dtype).to(device).eval()
+        
+        self.pipe= FluxPipeline.from_pretrained(flux_path, text_encoder=None, text_encoder_2=None,tokenizer=None, tokenizer_2=None, vae=None, torch_dtype=self.dtype).to(device)
+
+        self.vae = AutoencoderKL.from_pretrained(flux_path, subfolder="vae", torch_dtype=self.dtype).to(device)
+        self.qwen_proj = self.get_proj(qwen_proj_path)
+        
+
+    def get_t5_input_embeds(self,text_prompt=None):
+        text_input_ids = self.clip_tokenizer(
+            text_prompt,
+            padding="max_length",
+            max_length=77,
+            truncation=True,
+            return_overflowing_tokens=False,
+            return_length=False,
+            return_tensors="pt",
+        ).input_ids
+        pooled_prompt_embeds = self.clip_model(text_input_ids.to(device), output_hidden_states=False).pooler_output.to(dtype=torch.bfloat16, device=device)
+        text_input_ids = self.t5_tokenizer(
+            text_prompt,
+            # padding="max_length",
+            # max_length=512,
+            # truncation=True,
+            return_overflowing_tokens=False,
+            return_length=False,
+            return_tensors="pt",
+        ).input_ids
+        print(f"get_t5_input_embeds input_ids: {text_input_ids.shape}")
+        prompt_embeds = self.t5_model(text_input_ids.to(device), output_hidden_states=False)[0].to(dtype=torch.bfloat16, device=device)
+        return pooled_prompt_embeds, prompt_embeds
+
+    def get_text_embeddings(self, output_hidden_state):
+        use_answer = False
+        if use_answer:
+            text_embeddings = []
+            for hidden_states in  output_hidden_state["hidden_states"][1:]:
+                text_embeddings.append(torch.cat(hidden_states))
+            text_embeddings = torch.cat(text_embeddings,dim=1).unsqueeze(0)
+        else:
+            text_embeddings = torch.cat(output_hidden_state["hidden_states"][0]).unsqueeze(0)
+        return text_embeddings
+
+
+
+    def get_qwen_inputs_embeds(self, videos=None, images=None, text_prompt=None, proj=None):
+        message = [{"role": "user", "content": []}]
+        image_list = []
+        if images is not None and len(images) > 0:
+            for image in images:
+                image_input = Image.open(image).convert('RGB').resize(size=(128, 128))
+                message[0]["content"].append({"type": "image", "image": image_input})
+                image_list.append(image_input)
+        
+        if videos is not None and len(videos) > 0:
+            assert len(videos) == 1
+            video = videos[0]
+            message[0]["content"].append({
+                        "type": "video",
+                        "video": video,
+                        "max_pixels": 128 * 128,
+                        "fps": 1.0,
+                    })
+            _, video_inputs = process_vision_info(message)
+
+        if videos is None:
+            video_inputs = None
+                
+
+        if text_prompt is not None:
+            message[0]["content"].append({"type": "text", "text": text_prompt})
+        
+        prompt = self.qwen_processor.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
+
+        inputs = self.qwen_processor(
+        text=[prompt],
+        images=None if len(image_list) == 0 else image_list,
+        videos= video_inputs,
+        padding="max_length",
+        max_length=512, 
+        truncation=True, 
+        return_tensors="pt",
+        
+        ).to(device)
+
+        output_hidden_state = self.qwen_encoder.generate(**inputs, max_new_tokens=128,output_hidden_states=True,return_dict_in_generate=True)
+
+        text_embeddings = self.get_text_embeddings(output_hidden_state)
+        pooled_prompt_embeds, prompt_embeds = proj(text_embeddings)
+        return pooled_prompt_embeds, prompt_embeds
+        
+    def get_proj(self, proj_path):
+
+        proj = create_proj3_qwen7b(in_channels=29, use_t5=False, use_scale=False, use_cnn=True)
+
+
+        state_dict = torch.load(proj_path, map_location="cpu")
+        state_dict_new = {}
+        for k,v in state_dict.items():
+            k_new = k.replace("module.","")
+            state_dict_new[k_new] = v
+
+        proj.load_state_dict(state_dict_new)
+        proj.to(device=device, dtype=self.dtype)
+        proj.eval()
+        return proj
+    
+    @torch.no_grad()
+    def generate_X2I(self, pooled_prompt_embeds, prompt_embeds, outputs, filename, seed=None, height=1024, width=1024):
+
+        if seed is not None:
+            latents = self.pipe(
+                prompt_embeds=prompt_embeds,
+                pooled_prompt_embeds=pooled_prompt_embeds,
+                num_inference_steps=20,
+                guidance_scale=3.5,
+                height=height,
+                width=width,
+                output_type="latent",
+                generator=torch.Generator(device).manual_seed(seed)
+            ).images
+        else:
+            latents = self.pipe(
+                prompt_embeds=prompt_embeds,
+                pooled_prompt_embeds=pooled_prompt_embeds,
+                num_inference_steps=25,
+                guidance_scale=3.5,
+                height=height,
+                width=width,
+                output_type="latent",
+            ).images
+
+        vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels))
+        image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor)
+
+        latents = self.pipe._unpack_latents(latents, height, width, vae_scale_factor)
+        latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
+        image = self.vae.decode(latents, return_dict=False)[0]
+
+        image = image_processor.postprocess(image, output_type="pil")
+        return image
+    
+    def generate(self, prompt):
+        pooled_prompt_embeds, prompt_embeds = self.get_qwen_inputs_embeds(text_prompt=prompt, proj=self.qwen_proj)
+        image = self.generate_X2I(pooled_prompt_embeds, prompt_embeds, "None", "None", seed=42, height=1024, width=1024)
+        return image
 
 class SD35DTMModel(BaseModel):
     """
