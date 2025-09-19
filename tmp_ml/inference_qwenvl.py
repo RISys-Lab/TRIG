@@ -33,9 +33,23 @@ parser.add_argument('--flux_path', type=str,  default="/leonardo_work/EUHPC_R04_
 parser.add_argument('--use_answer', type=bool,  default=False)
 parser.add_argument('--num_steps', type=int, default=20)
 parser.add_argument('--num_gen_imgs', type=int, default=1)
+parser.add_argument('--multi_gpu', action='store_true', help='Enable multi-GPU support')
 args = parser.parse_args()
 
-device = "cuda:0"
+# 多GPU设备配置
+if args.multi_gpu and torch.cuda.device_count() > 1:
+    print(f"🔥 检测到 {torch.cuda.device_count()} 张GPU卡")
+    device_qwen = "cuda:0"      # Qwen模型放在第一张卡
+    device_flux = "cuda:1"      # FLUX相关模型放在第二张卡
+    print(f"📍 设备分配:")
+    print(f"  - Qwen模型: {device_qwen}")
+    print(f"  - FLUX/VAE模型: {device_flux}")
+else:
+    print(f"🔥 使用单GPU模式")
+    device_qwen = "cuda:0"
+    device_flux = "cuda:0"
+    print(f"📍 设备: {device_qwen}")
+
 dtype = torch.bfloat16
 
 outputs = "./outputs_qwen3b"
@@ -56,20 +70,29 @@ use_answer = args.use_answer
 num_gen_imgs = args.num_gen_imgs
 
 
-torch.cuda.set_device(device)
-
 print("=" * 70)
 print("🚀 开始加载 Qwen-VL X2I 模型")
 print("=" * 70)
 
 print(f"📋 模型配置:")
-print(f"  - 设备: {device}")
+print(f"  - Qwen设备: {device_qwen}")
+print(f"  - FLUX设备: {device_flux}")
 print(f"  - 数据类型: {dtype}")
 print(f"  - Qwen模型大小: {args.qwen_size}")
 print(f"  - Qwen模型路径: {qwen_path}")
 print(f"  - Flux模型路径: {flux_path}")
 print(f"  - 投影层权重: {qwen_proj_path}")
 print(f"  - 推理步数: {num_steps}")
+
+# 设置GPU内存
+if args.multi_gpu:
+    torch.cuda.set_device(device_qwen)
+    print(f"💾 GPU内存状态:")
+    for i in range(torch.cuda.device_count()):
+        print(f"  - GPU {i}: {torch.cuda.get_device_properties(i).name}")
+        print(f"    总内存: {torch.cuda.get_device_properties(i).total_memory / 1024**3:.1f}GB")
+else:
+    torch.cuda.set_device(device_qwen)
 
 # 1. 加载Qwen编码器
 print(f"\n🧠 [1/7] 加载Qwen2.5-VL-{args.qwen_size.upper()}编码器...")
@@ -78,8 +101,9 @@ qwen_encoder = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     qwen_path, 
     dtype=torch.bfloat16,
     local_files_only=True
-).eval().to(device=device)
+).eval().to(device=device_qwen)
 print(f"  ✅ Qwen编码器加载完成 ({time.time() - start_time:.2f}s)")
+print(f"  📍 已放置在设备: {device_qwen}")
 
 # 2. 加载Qwen处理器
 print(f"\n🔤 [2/7] 加载Qwen处理器...")
@@ -91,28 +115,32 @@ print(f"  ✅ Qwen处理器加载完成 ({time.time() - start_time:.2f}s)")
 print(f"\n📝 [3/7] 加载CLIP分词器和文本编码器...")
 start_time = time.time()
 clip_tokenizer = CLIPTokenizer.from_pretrained(flux_path, subfolder="tokenizer", dtype=dtype)
-clip_model = CLIPTextModel.from_pretrained(flux_path, subfolder="text_encoder", dtype=dtype).to(device).eval()
+clip_model = CLIPTextModel.from_pretrained(flux_path, subfolder="text_encoder", dtype=dtype).to(device_flux).eval()
 print(f"  ✅ CLIP组件加载完成 ({time.time() - start_time:.2f}s)")
+print(f"  📍 已放置在设备: {device_flux}")
 
 # 4. 加载T5分词器和模型
 print(f"\n📚 [4/7] 加载T5分词器和文本编码器...")
 start_time = time.time()
 t5_tokenizer = T5TokenizerFast.from_pretrained(flux_path, subfolder="tokenizer_2", dtype=dtype)
-t5_model = T5EncoderModel.from_pretrained(flux_path, subfolder="text_encoder_2", dtype=dtype).to(device).eval()
+t5_model = T5EncoderModel.from_pretrained(flux_path, subfolder="text_encoder_2", dtype=dtype).to(device_flux).eval()
 print(f"  ✅ T5组件加载完成 ({time.time() - start_time:.2f}s)")
+print(f"  📍 已放置在设备: {device_flux}")
 
 # 5. 加载FLUX Pipeline
 print(f"\n🌊 [5/7] 加载FLUX Pipeline...")
 start_time = time.time()
 pipeline = FluxPipeline.from_pretrained(flux_path, text_encoder=None, text_encoder_2=None,
-    tokenizer=None, tokenizer_2=None, vae=None, dtype=dtype).to(device)
+    tokenizer=None, tokenizer_2=None, vae=None, dtype=dtype).to(device_flux)
 print(f"  ✅ FLUX Pipeline加载完成 ({time.time() - start_time:.2f}s)")
+print(f"  📍 已放置在设备: {device_flux}")
 
 # 6. 加载VAE
 print(f"\n🖼️  [6/7] 加载VAE...")
 start_time = time.time()
-vae = AutoencoderKL.from_pretrained(flux_path, subfolder="vae", dtype=dtype).to(device)
+vae = AutoencoderKL.from_pretrained(flux_path, subfolder="vae", dtype=dtype).to(device_flux)
 print(f"  ✅ VAE加载完成 ({time.time() - start_time:.2f}s)")
+print(f"  📍 已放置在设备: {device_flux}")
 
 def get_proj(proj_path):
     print(f"\n⚖️  [7/7] 加载投影层...")
@@ -135,15 +163,31 @@ def get_proj(proj_path):
         state_dict_new[k_new] = v
 
     proj.load_state_dict(state_dict_new)
-    proj.to(device=device, dtype=dtype)
+    proj.to(device=device_qwen, dtype=dtype)
     proj.eval()
     print(f"  ✅ 投影层加载完成 ({time.time() - start_time:.2f}s)")
+    print(f"  📍 已放置在设备: {device_qwen}")
     return proj
 
 qwen_proj = get_proj(qwen_proj_path)
 
 print("\n" + "=" * 70)
 print("🎉 所有模型组件加载完成！")
+
+# 显示GPU内存使用情况
+if args.multi_gpu:
+    print(f"\n💾 当前GPU内存使用情况:")
+    for i in range(torch.cuda.device_count()):
+        allocated = torch.cuda.memory_allocated(i) / 1024**3
+        reserved = torch.cuda.memory_reserved(i) / 1024**3
+        total = torch.cuda.get_device_properties(i).total_memory / 1024**3
+        print(f"  - GPU {i}: 已分配 {allocated:.1f}GB / 已预留 {reserved:.1f}GB / 总计 {total:.1f}GB")
+else:
+    allocated = torch.cuda.memory_allocated(0) / 1024**3
+    reserved = torch.cuda.memory_reserved(0) / 1024**3
+    total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+    print(f"\n💾 GPU内存使用: 已分配 {allocated:.1f}GB / 已预留 {reserved:.1f}GB / 总计 {total:.1f}GB")
+
 print("=" * 70)
 def get_t5_input_embeds(text_prompt=None):
     text_input_ids = clip_tokenizer(
@@ -155,7 +199,7 @@ def get_t5_input_embeds(text_prompt=None):
         return_length=False,
         return_tensors="pt",
     ).input_ids
-    pooled_prompt_embeds = clip_model(text_input_ids.to(device), output_hidden_states=False).pooler_output.to(dtype=torch.bfloat16, device=device)
+    pooled_prompt_embeds = clip_model(text_input_ids.to(device_flux), output_hidden_states=False).pooler_output.to(dtype=torch.bfloat16, device=device_flux)
     text_input_ids = t5_tokenizer(
         text_prompt,
         # padding="max_length",
@@ -166,7 +210,7 @@ def get_t5_input_embeds(text_prompt=None):
         return_tensors="pt",
     ).input_ids
     print(f"get_t5_input_embeds input_ids: {text_input_ids.shape}")
-    prompt_embeds = t5_model(text_input_ids.to(device), output_hidden_states=False)[0].to(dtype=torch.bfloat16, device=device)
+    prompt_embeds = t5_model(text_input_ids.to(device_flux), output_hidden_states=False)[0].to(dtype=torch.bfloat16, device=device_flux)
     return pooled_prompt_embeds, prompt_embeds
 
 def get_text_embeddings(output_hidden_state):
@@ -222,12 +266,18 @@ def get_qwen_inputs_embeds(videos=None, images=None, text_prompt=None, proj=qwen
     truncation=True, 
     return_tensors="pt",
     
-    ).to(device)
+    ).to(device_qwen)
 
     output_hidden_state = qwen_encoder.generate(**inputs, max_new_tokens=128,output_hidden_states=True,return_dict_in_generate=True)
 
     text_embeddings = get_text_embeddings(output_hidden_state)
     pooled_prompt_embeds, prompt_embeds = proj(text_embeddings)
+    
+    # 如果是多GPU模式，需要将嵌入移到FLUX设备上
+    if args.multi_gpu and device_qwen != device_flux:
+        pooled_prompt_embeds = pooled_prompt_embeds.to(device_flux)
+        prompt_embeds = prompt_embeds.to(device_flux)
+    
     return pooled_prompt_embeds, prompt_embeds
 
 
@@ -253,7 +303,7 @@ def generate(pooled_prompt_embeds, prompt_embeds, outputs, filename, seed=None, 
             height=height,
             width=width,
             output_type="latent",
-            generator=torch.Generator(device).manual_seed(seed)
+            generator=torch.Generator(device_flux).manual_seed(seed)
         ).images
     else:
         latents = pipeline(
@@ -338,15 +388,42 @@ def text2image(outputs=outputs):
                 # 图像生成
                 print(f"    🎨 [2/2] 图像生成...")
                 generate(pooled_prompt_embeds, prompt_embeds, outputs=outputs, filename=f"{index}_{key}_{i}")
+                
+                # 每5个任务显示一次内存使用情况
+                if args.multi_gpu and current_task % 5 == 0:
+                    print(f"    💾 内存状态检查:")
+                    for gpu_id in range(torch.cuda.device_count()):
+                        allocated = torch.cuda.memory_allocated(gpu_id) / 1024**3
+                        print(f"      GPU {gpu_id}: {allocated:.1f}GB")
     
     print(f"\n🎉 所有文本到图像生成任务完成！")
     print(f"⏱️  总用时: {time.time() - task_start_time:.2f}s")
     print(f"📁 所有图像已保存到: {outputs}")
+    
+    # 最终内存状态
+    if args.multi_gpu:
+        print(f"\n💾 最终GPU内存使用情况:")
+        for i in range(torch.cuda.device_count()):
+            allocated = torch.cuda.memory_allocated(i) / 1024**3
+            reserved = torch.cuda.memory_reserved(i) / 1024**3
+            total = torch.cuda.get_device_properties(i).total_memory / 1024**3
+            print(f"  - GPU {i}: 已分配 {allocated:.1f}GB / 已预留 {reserved:.1f}GB / 总计 {total:.1f}GB")
+    
     print("=" * 50)
 
 
 
 if __name__ == "__main__":
+    print(f"\n📋 运行参数:")
+    print(f"  - 多GPU模式: {'启用' if args.multi_gpu else '关闭'}")
+    print(f"  - 生成步数: {num_steps}")
+    print(f"  - 每个提示词生成数: {num_gen_imgs}")
+    print(f"  - Qwen模型大小: {args.qwen_size}")
+    
+    if args.multi_gpu and torch.cuda.device_count() < 2:
+        print(f"⚠️  警告: 启用了多GPU模式但只检测到 {torch.cuda.device_count()} 张GPU卡")
+        print(f"   建议使用单GPU模式或确保有至少2张GPU可用")
+    
     text2image()
 
 
