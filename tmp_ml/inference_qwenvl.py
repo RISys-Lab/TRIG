@@ -20,6 +20,7 @@ import argparse
 import librosa
 import soundfile as sf
 from decord import VideoReader, cpu, gpu
+from tqdm import tqdm
 
 
 
@@ -27,41 +28,36 @@ from decord import VideoReader, cpu, gpu
 parser = argparse.ArgumentParser("Inference", add_help=True)
 # parser.add_argument('--minicpm_path', type=str, default="openbmb/MiniCPM-o-2_6")
 parser.add_argument('--qwen_size', type=str, default='7b', choices=['3b', '7b'], help="Model size: 1b or 4b")
-parser.add_argument('--qwen3b_path', type=str, default="/mnt/data/group/models/Qwen2.5-VL-3B-Instruct")
-# parser.add_argument('--flux_path', type=str,  default="shuttleai/shuttle-3-diffusion")
 parser.add_argument('--flux_path', type=str,  default="/leonardo_scratch/fast/EUHPC_R04_192/fmohamma/fast_weights/FLUX.1-schnell")
 parser.add_argument('--use_answer', type=bool,  default=False)
-parser.add_argument('--num_steps', type=int, default=20)
+parser.add_argument('--num_steps', type=int, default=28)
 parser.add_argument('--num_gen_imgs', type=int, default=1)
 parser.add_argument('--multi_gpu', action='store_true', help='Enable multi-GPU support')
+parser.add_argument('--input_json', type=str, default="/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json")
+parser.add_argument('--output_dir', type=str, default="/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/X2I")
 args = parser.parse_args()
 
 # 多GPU设备配置
 if args.multi_gpu and torch.cuda.device_count() > 1:
-    print(f"🔥 检测到 {torch.cuda.device_count()} 张GPU卡")
-    device_qwen = "cuda:0"      # Qwen模型放在第一张卡
-    device_flux = "cuda:1"      # FLUX相关模型放在第二张卡
-    print(f"📍 设备分配:")
-    print(f"  - Qwen模型: {device_qwen}")
-    print(f"  - FLUX/VAE模型: {device_flux}")
+    print(f"🔥 Detected {torch.cuda.device_count()} GPUs")
+    device_qwen = "cuda:0"
+    device_flux = "cuda:1"
+    print(f"📍 Device assignment:")
+    print(f"  - Qwen model: {device_qwen}")
+    print(f"  - FLUX/VAE: {device_flux}")
 else:
-    print(f"🔥 使用单GPU模式")
+    print(f"🔥 Single-GPU mode")
     device_qwen = "cuda:0"
     device_flux = "cuda:0"
-    print(f"📍 设备: {device_qwen}")
+    print(f"📍 Device: {device_qwen}")
 
 dtype = torch.bfloat16
 
-outputs = "./outputs_qwen3b"
 
-if args.qwen_size == "7b":
-    outputs = "./outputs_qwen7b"
-    qwen_path = '/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/Qwen2.5-VL-7B-Instruct'
-    qwen_proj_path = '/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/X2I/X2I-Qwen2.5VL-7B.bin'
-if args.qwen_size == "3b":
-    outputs = "./outputs_qwen3b"
-    qwen_path = '/mnt/data/group/models/Qwen2.5-VL-3B-Instruct'
-    qwen_proj_path = '/mnt/data/group/xuguo/X2I_qwen/checkpoints/qwen3b/diffusion_pytorch_model.bin'
+
+outputs = "./outputs_qwen7b"
+qwen_path = '/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/Qwen2.5-VL-7B-Instruct'
+qwen_proj_path = '/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/X2I/X2I-Qwen2.5VL-7B.bin'
 
 
 num_steps = args.num_steps
@@ -71,64 +67,64 @@ num_gen_imgs = args.num_gen_imgs
 
 
 print("=" * 70)
-print("🚀 开始加载 Qwen-VL X2I 模型")
+print("🚀 Start loading Qwen-VL X2I models")
 print("=" * 70)
 
-print(f"📋 模型配置:")
-print(f"  - Qwen设备: {device_qwen}")
-print(f"  - FLUX设备: {device_flux}")
-print(f"  - 数据类型: {dtype}")
-print(f"  - Qwen模型大小: {args.qwen_size}")
-print(f"  - Qwen模型路径: {qwen_path}")
-print(f"  - Flux模型路径: {flux_path}")
-print(f"  - 投影层权重: {qwen_proj_path}")
-print(f"  - 推理步数: {num_steps}")
+print(f"📋 Configuration:")
+print(f"  - Qwen device: {device_qwen}")
+print(f"  - FLUX device: {device_flux}")
+print(f"  - Dtype: {dtype}")
+print(f"  - Qwen size: {args.qwen_size}")
+print(f"  - Qwen path: {qwen_path}")
+print(f"  - FLUX path: {flux_path}")
+print(f"  - Projection weights: {qwen_proj_path}")
+print(f"  - Inference steps: {num_steps}")
 
-# 设置GPU内存
+# GPU memory setup
 if args.multi_gpu:
     torch.cuda.set_device(device_qwen)
-    print(f"💾 GPU内存状态:")
+    print(f"💾 GPU memory info:")
     for i in range(torch.cuda.device_count()):
         print(f"  - GPU {i}: {torch.cuda.get_device_properties(i).name}")
-        print(f"    总内存: {torch.cuda.get_device_properties(i).total_memory / 1024**3:.1f}GB")
+        print(f"    Total memory: {torch.cuda.get_device_properties(i).total_memory / 1024**3:.1f}GB")
 else:
     torch.cuda.set_device(device_qwen)
 
-# 1. 加载Qwen编码器
-print(f"\n🧠 [1/7] 加载Qwen2.5-VL-{args.qwen_size.upper()}编码器...")
+# 1. Load Qwen encoder
+print(f"\n🧠 [1/7] Loading Qwen2.5-VL-{args.qwen_size.upper()} encoder...")
 start_time = time.time()
 qwen_encoder = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     qwen_path, 
     dtype=torch.bfloat16,
     local_files_only=True
 ).eval().to(device=device_qwen)
-print(f"  ✅ Qwen编码器加载完成 ({time.time() - start_time:.2f}s)")
-print(f"  📍 已放置在设备: {device_qwen}")
+print(f"  ✅ Qwen encoder loaded ({time.time() - start_time:.2f}s)")
+print(f"  📍 Placed on device: {device_qwen}")
 
-# 2. 加载Qwen处理器
-print(f"\n🔤 [2/7] 加载Qwen处理器...")
+# 2. Load Qwen processor
+print(f"\n🔤 [2/7] Loading Qwen processor...")
 start_time = time.time()
 qwen_processor = AutoProcessor.from_pretrained(qwen_path, local_files_only=True)
-print(f"  ✅ Qwen处理器加载完成 ({time.time() - start_time:.2f}s)")
+print(f"  ✅ Qwen processor loaded ({time.time() - start_time:.2f}s)")
 
-# 3. 加载CLIP分词器和模型
-print(f"\n📝 [3/7] 加载CLIP分词器和文本编码器...")
+# 3. Load CLIP tokenizer & text encoder
+print(f"\n📝 [3/7] Loading CLIP tokenizer & text encoder...")
 start_time = time.time()
 clip_tokenizer = CLIPTokenizer.from_pretrained(flux_path, subfolder="tokenizer", dtype=dtype)
 clip_model = CLIPTextModel.from_pretrained(flux_path, subfolder="text_encoder", dtype=dtype).to(device_flux).eval()
-print(f"  ✅ CLIP组件加载完成 ({time.time() - start_time:.2f}s)")
-print(f"  📍 已放置在设备: {device_flux}")
+print(f"  ✅ CLIP components loaded ({time.time() - start_time:.2f}s)")
+print(f"  📍 Placed on device: {device_flux}")
 
-# 4. 加载T5分词器和模型
-print(f"\n📚 [4/7] 加载T5分词器和文本编码器...")
+# 4. Load T5 tokenizer & text encoder
+print(f"\n📚 [4/7] Loading T5 tokenizer & text encoder...")
 start_time = time.time()
 t5_tokenizer = T5TokenizerFast.from_pretrained(flux_path, subfolder="tokenizer_2", dtype=dtype)
 t5_model = T5EncoderModel.from_pretrained(flux_path, subfolder="text_encoder_2", dtype=dtype).to(device_flux).eval()
-print(f"  ✅ T5组件加载完成 ({time.time() - start_time:.2f}s)")
-print(f"  📍 已放置在设备: {device_flux}")
+print(f"  ✅ T5 components loaded ({time.time() - start_time:.2f}s)")
+print(f"  📍 Placed on device: {device_flux}")
 
-# 5. 加载FLUX Pipeline
-print(f"\n🌊 [5/7] 加载FLUX Pipeline...")
+# 5. Load FLUX Pipeline
+print(f"\n🌊 [5/7] Loading FLUX Pipeline...")
 start_time = time.time()
 pipeline = FluxPipeline.from_pretrained(
     flux_path, 
@@ -139,30 +135,30 @@ pipeline = FluxPipeline.from_pretrained(
     vae=None, 
     torch_dtype=dtype
 ).to(device_flux)
-print(f"  ✅ FLUX Pipeline加载完成 ({time.time() - start_time:.2f}s)")
-print(f"  📍 已放置在设备: {device_flux}")
+print(f"  ✅ FLUX Pipeline loaded ({time.time() - start_time:.2f}s)")
+print(f"  📍 Placed on device: {device_flux}")
 
-# 6. 加载VAE
-print(f"\n🖼️  [6/7] 加载VAE...")
+# 6. Load VAE
+print(f"\n🖼️  [6/7] Loading VAE...")
 start_time = time.time()
 vae = AutoencoderKL.from_pretrained(flux_path, subfolder="vae", torch_dtype=dtype).to(device_flux)
-print(f"  ✅ VAE加载完成 ({time.time() - start_time:.2f}s)")
-print(f"  📍 已放置在设备: {device_flux}")
+print(f"  ✅ VAE loaded ({time.time() - start_time:.2f}s)")
+print(f"  📍 Placed on device: {device_flux}")
 
 def get_proj(proj_path):
-    print(f"\n⚖️  [7/7] 加载投影层...")
+    print(f"\n⚖️  [7/7] Loading projection head...")
     start_time = time.time()
-    print(f"  📁 投影层权重路径: {proj_path}")
+    print(f"  📁 Projection weights path: {proj_path}")
 
     if args.qwen_size == "3b":
         proj = create_proj3_qwen3b(in_channels=37, use_t5=False, use_scale=False, use_cnn=True)
-        print(f"  🔧 创建3B投影层架构")
+        print(f"  🔧 Create 3B projection architecture")
     if args.qwen_size == "7b":
         proj = create_proj3_qwen7b(in_channels=29, use_t5=False, use_scale=False, use_cnn=True)
-        print(f"  🔧 创建7B投影层架构")
+        print(f"  🔧 Create 7B projection architecture")
 
     state_dict = torch.load(proj_path, map_location="cpu")
-    print(f"  📊 加载权重包含 {len(state_dict)} 个参数")
+    print(f"  📊 Loaded weights contain {len(state_dict)} tensors")
     
     state_dict_new = {}
     for k,v in state_dict.items():
@@ -172,28 +168,28 @@ def get_proj(proj_path):
     proj.load_state_dict(state_dict_new)
     proj.to(device=device_qwen, dtype=dtype)
     proj.eval()
-    print(f"  ✅ 投影层加载完成 ({time.time() - start_time:.2f}s)")
-    print(f"  📍 已放置在设备: {device_qwen}")
+    print(f"  ✅ Projection head loaded ({time.time() - start_time:.2f}s)")
+    print(f"  📍 Placed on device: {device_qwen}")
     return proj
 
 qwen_proj = get_proj(qwen_proj_path)
 
 print("\n" + "=" * 70)
-print("🎉 所有模型组件加载完成！")
+print("🎉 All model components loaded!")
 
-# 显示GPU内存使用情况
+# Show GPU memory
 if args.multi_gpu:
-    print(f"\n💾 当前GPU内存使用情况:")
+    print(f"\n💾 Current GPU memory usage:")
     for i in range(torch.cuda.device_count()):
         allocated = torch.cuda.memory_allocated(i) / 1024**3
         reserved = torch.cuda.memory_reserved(i) / 1024**3
         total = torch.cuda.get_device_properties(i).total_memory / 1024**3
-        print(f"  - GPU {i}: 已分配 {allocated:.1f}GB / 已预留 {reserved:.1f}GB / 总计 {total:.1f}GB")
+        print(f"  - GPU {i}: Alloc {allocated:.1f}GB / Reserved {reserved:.1f}GB / Total {total:.1f}GB")
 else:
     allocated = torch.cuda.memory_allocated(0) / 1024**3
     reserved = torch.cuda.memory_reserved(0) / 1024**3
     total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-    print(f"\n💾 GPU内存使用: 已分配 {allocated:.1f}GB / 已预留 {reserved:.1f}GB / 总计 {total:.1f}GB")
+    print(f"\n💾 GPU memory: Alloc {allocated:.1f}GB / Reserved {reserved:.1f}GB / Total {total:.1f}GB")
 
 print("=" * 70)
 def get_t5_input_embeds(text_prompt=None):
@@ -216,7 +212,6 @@ def get_t5_input_embeds(text_prompt=None):
         return_length=False,
         return_tensors="pt",
     ).input_ids
-    print(f"get_t5_input_embeds input_ids: {text_input_ids.shape}")
     prompt_embeds = t5_model(text_input_ids.to(device_flux), output_hidden_states=False)[0].to(dtype=torch.bfloat16, device=device_flux)
     return pooled_prompt_embeds, prompt_embeds
 
@@ -290,17 +285,9 @@ def get_qwen_inputs_embeds(videos=None, images=None, text_prompt=None, proj=qwen
 
 @torch.no_grad()
 def generate(pooled_prompt_embeds, prompt_embeds, outputs, filename, seed=None, height=1024, width=1024):
-    print(f"\n  🎨 生成图像: {filename}")
     gen_start_time = time.time()
     os.makedirs(outputs, exist_ok=True)
 
-    print(f"      📐 图像尺寸: {height}x{width}")
-    print(f"      🎲 随机种子: {seed if seed is not None else '随机'}")
-    print(f"      🔄 推理步数: {num_steps}")
-    
-    # 扩散生成
-    print(f"      🌀 [1/3] FLUX扩散生成...")
-    step_start = time.time()
     if seed is not None:
         latents = pipeline(
             prompt_embeds=prompt_embeds,
@@ -322,11 +309,7 @@ def generate(pooled_prompt_embeds, prompt_embeds, outputs, filename, seed=None, 
             width=width,
             output_type="latent",
         ).images
-    print(f"          ✅ 扩散生成完成 ({time.time() - step_start:.2f}s)")
 
-    # VAE解码
-    print(f"      🖼️  [2/3] VAE解码...")
-    step_start = time.time()
     vae_scale_factor = pipeline.vae_scale_factor
     image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor * 2)
 
@@ -339,31 +322,24 @@ def generate(pooled_prompt_embeds, prompt_embeds, outputs, filename, seed=None, 
         elif latents.ndim == 4:
             pass
         else:
-            raise ValueError(f"未知latent维度: {latents.shape}")
+            raise ValueError(f"Unexpected latent shape: {latents.shape}")
     else:
-        raise TypeError(f"不支持的latent类型: {type(latents)}")
+        raise TypeError(f"Unsupported latent type: {type(latents)}")
     latents = (latents / vae.config.scaling_factor) + vae.config.shift_factor
     image = vae.decode(latents, return_dict=False)[0]
-    print(f"          ✅ VAE解码完成 ({time.time() - step_start:.2f}s)")
-
-    # 后处理和保存
-    print(f"      💾 [3/3] 后处理和保存...")
-    step_start = time.time()
     image = image_processor.postprocess(image, output_type="pil")
     output_path = f"{outputs}/{filename}.jpg"
     image[0].save(output_path)
-    print(f"          ✅ 图像已保存: {output_path} ({time.time() - step_start:.2f}s)")
-    
-    print(f"      🎉 图像生成完成，总用时: {time.time() - gen_start_time:.2f}s")
+    return output_path
 
 
 def text2image(outputs=outputs):
-    print(f"\n🎨 开始文本到图像生成任务")
+    print(f"\n🎨 Starting text-to-image generation")
     print("=" * 50)
-    
+
     outputs = os.path.join(outputs, "text2image")
     os.makedirs(outputs, exist_ok=True)
-    print(f"📁 输出目录: {outputs}")
+    print(f"📁 Output directory: {outputs}")
 
     prompts = [{
         "EN": "A majestic elephant stands gracefully in a sun-drenched savannah, its textured gray skin glistening under the warm golden light of the late afternoon sun. The elephant, with large, expressive ears and a gently curved trunk, is posed mid-stride, kicking up a cloud of dust as it moves towards a shimmering waterhole surrounded by lush green acacia trees. The scene is painted in a vibrant impressionistic style, utilizing a rich palette of earthy tones, soft greens, and warm yellows that evoke a sense of tranquility and connection to nature. The camera angle is low, capturing the elephant's grandeur against the expansive sky, dotted with wispy clouds. In the foreground, a few colorful wildflowers bloom, adding splashes of color, while a distant herd of antelope grazes peacefully, enhancing the serene atmosphere of this enchanting moment in the wild.",
@@ -376,47 +352,55 @@ def text2image(outputs=outputs):
 
     total_tasks = len(prompts) * len(prompts[0]) * num_gen_imgs
     current_task = 0
-    
-    print(f"📊 任务统计:")
-    print(f"  - 提示词集合数: {len(prompts)}")
-    print(f"  - 每个集合的语言数: {len(prompts[0])}")
-    print(f"  - 每个提示词的生成数: {num_gen_imgs}")
-    print(f"  - 总任务数: {total_tasks}")
-    
+
     task_start_time = time.time()
 
     for index, prompt_dict in enumerate(prompts):
-        print(f"\n📝 处理提示词集合 {index + 1}/{len(prompts)}")
-        
         for key, prompt in prompt_dict.items():
-            print(f"\n  🌍 语言: {key}")
-            print(f"  📄 提示词: {prompt[:100]}...")
-            
             for i in range(num_gen_imgs):
                 current_task += 1
-                print(f"\n  🔄 [{current_task}/{total_tasks}] 处理 {key} 语言，第 {i+1} 张图像")
-                
-                # 文本编码
-                print(f"    📝 [1/2] Qwen文本编码...")
-                encoding_start = time.time()
                 pooled_prompt_embeds, prompt_embeds = get_qwen_inputs_embeds(text_prompt=prompt)
-                print(f"        ✅ 文本编码完成 ({time.time() - encoding_start:.2f}s)")
-                print(f"        📊 嵌入维度: pooled={pooled_prompt_embeds.shape}, prompt={prompt_embeds.shape}")
-                
-                # 图像生成
-                print(f"    🎨 [2/2] 图像生成...")
                 generate(pooled_prompt_embeds, prompt_embeds, outputs=outputs, filename=f"{index}_{key}_{i}")
-                
-                # 每5个任务显示一次内存使用情况
-                if args.multi_gpu and current_task % 5 == 0:
-                    print(f"    💾 内存状态检查:")
-                    for gpu_id in range(torch.cuda.device_count()):
-                        allocated = torch.cuda.memory_allocated(gpu_id) / 1024**3
-                        print(f"      GPU {gpu_id}: {allocated:.1f}GB")
     
-    print(f"\n🎉 所有文本到图像生成任务完成！")
-    print(f"⏱️  总用时: {time.time() - task_start_time:.2f}s")
-    print(f"📁 所有图像已保存到: {outputs}")
+    print(f"\n🎉 Generation finished")
+    print(f"⏱️  Total time: {time.time() - task_start_time:.2f}s")
+    print(f"📁 Images saved to: {outputs}")
+
+
+def json2image(input_json_path: str, base_outputs: str):
+    start_time = time.time()
+    if args.output_dir is not None:
+        out_dir = args.output_dir
+    else:
+        out_dir = os.path.join(base_outputs, "json2image")
+    os.makedirs(out_dir, exist_ok=True)
+
+    with open(input_json_path, "r", encoding="utf-8") as f:
+        data_list = json.load(f)
+
+    if not isinstance(data_list, list):
+        raise ValueError("Input JSON must be a list of objects with data_id and prompt")
+
+    generated_count = 0
+    skipped_count = 0
+    for item in tqdm(data_list, desc="Generating", unit="img"):
+        data_id = item.get("data_id")
+        prompt = item.get("prompt")
+        if data_id is None or prompt is None:
+            continue
+        filename = str(data_id).replace("/", "_")
+        target_path = os.path.join(out_dir, f"{filename}.jpg")
+        if os.path.exists(target_path):
+            skipped_count += 1
+            continue
+        pooled_prompt_embeds, prompt_embeds = get_qwen_inputs_embeds(text_prompt=prompt)
+        generate(pooled_prompt_embeds, prompt_embeds, outputs=out_dir, filename=filename)
+        generated_count += 1
+
+    print(f"\n🎉 Generation finished")
+    print(f"⏱️  Total time: {time.time() - start_time:.2f}s")
+    print(f"📁 Images saved to: {out_dir}")
+    print(f"✅ Generated: {generated_count} | ⏭️ Skipped existing: {skipped_count}")
     
     # 最终内存状态
     if args.multi_gpu:
@@ -432,17 +416,20 @@ def text2image(outputs=outputs):
 
 
 if __name__ == "__main__":
-    print(f"\n📋 运行参数:")
-    print(f"  - 多GPU模式: {'启用' if args.multi_gpu else '关闭'}")
-    print(f"  - 生成步数: {num_steps}")
-    print(f"  - 每个提示词生成数: {num_gen_imgs}")
-    print(f"  - Qwen模型大小: {args.qwen_size}")
-    
+    print(f"\n📋 Run args:")
+    print(f"  - Multi-GPU: {'enabled' if args.multi_gpu else 'disabled'}")
+    print(f"  - Inference steps: {num_steps}")
+    print(f"  - Images per prompt: {num_gen_imgs}")
+    print(f"  - Qwen size: {args.qwen_size}")
+
     if args.multi_gpu and torch.cuda.device_count() < 2:
-        print(f"⚠️  警告: 启用了多GPU模式但只检测到 {torch.cuda.device_count()} 张GPU卡")
-        print(f"   建议使用单GPU模式或确保有至少2张GPU可用")
-    
-    text2image()
+        print(f"⚠️  Warning: Multi-GPU enabled but only {torch.cuda.device_count()} GPU(s) detected")
+        print(f"   Suggest using single-GPU mode or ensure at least 2 GPUs are available")
+
+    if args.input_json:
+        json2image(args.input_json, outputs)
+    else:
+        text2image()
 
 
     
