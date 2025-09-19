@@ -60,8 +60,8 @@ vae = AutoencoderKL.from_pretrained(
     subfolder="vae",
     torch_dtype=torch.bfloat16
 ).to(device)
-vae_scale_factor = 2 ** (len(vae.config.block_out_channels))
-image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor)
+vae_scale_factor = pipeline.vae_scale_factor
+image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor * 2)
 
 raw_text = "a photo of a beautiful girl"
 
@@ -85,7 +85,18 @@ with torch.no_grad():
         output_type="latent",
     ).images
 
-    latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
+    # 兼容不同 diffusers 版本输出：可能是打包的 3D [B,P,C] 或已解包的 4D [B,C,H,W]
+    if isinstance(latents, (list, tuple)):
+        latents = latents[0]
+    if isinstance(latents, torch.Tensor):
+        if latents.ndim == 3:
+            latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
+        elif latents.ndim == 4:
+            pass
+        else:
+            raise ValueError(f"Unexpected latent shape: {latents.shape}")
+    else:
+        raise TypeError(f"Unsupported latent type: {type(latents)}")
     latents = (latents / vae.config.scaling_factor) + vae.config.shift_factor
     image = vae.decode(latents, return_dict=False)[0]
     image = image_processor.postprocess(image, output_type="pil")
