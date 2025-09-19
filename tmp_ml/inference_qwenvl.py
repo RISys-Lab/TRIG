@@ -35,6 +35,8 @@ parser.add_argument('--num_gen_imgs', type=int, default=1)
 parser.add_argument('--multi_gpu', action='store_true', help='Enable multi-GPU support')
 parser.add_argument('--input_json', type=str, default="/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json")
 parser.add_argument('--output_dir', type=str, default="/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/X2I")
+parser.add_argument('--start_idx', type=int, default=None)
+parser.add_argument('--end_idx', type=int, default=None)
 args = parser.parse_args()
 
 # 多GPU设备配置
@@ -381,9 +383,19 @@ def json2image(input_json_path: str, base_outputs: str):
     if not isinstance(data_list, list):
         raise ValueError("Input JSON must be a list of objects with data_id and prompt")
 
+    # Apply slicing range
+    start = args.start_idx if args.start_idx is not None else 0
+    end = args.end_idx if args.end_idx is not None else len(data_list)
+    start = max(0, start)
+    end = min(len(data_list), end)
+    if start >= end:
+        print(f"Empty range: start_idx={args.start_idx}, end_idx={args.end_idx}, total={len(data_list)}")
+        return
+    data_slice = data_list[start:end]
+
     generated_count = 0
     skipped_count = 0
-    for item in tqdm(data_list, desc="Generating", unit="img"):
+    for item in tqdm(data_slice, desc=f"Generating [{start}:{end}]", unit="img"):
         data_id = item.get("data_id")
         prompt = item.get("prompt")
         if data_id is None or prompt is None:
@@ -397,7 +409,7 @@ def json2image(input_json_path: str, base_outputs: str):
         generate(pooled_prompt_embeds, prompt_embeds, outputs=out_dir, filename=filename)
         generated_count += 1
 
-    print(f"\n🎉 Generation finished")
+    print(f"\n🎉 Generation finished for range [{start}:{end}]")
     print(f"⏱️  Total time: {time.time() - start_time:.2f}s")
     print(f"📁 Images saved to: {out_dir}")
     print(f"✅ Generated: {generated_count} | ⏭️ Skipped existing: {skipped_count}")

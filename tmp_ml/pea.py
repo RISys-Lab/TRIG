@@ -63,7 +63,7 @@ vae = AutoencoderKL.from_pretrained(
 vae_scale_factor = pipeline.vae_scale_factor
 image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor * 2)
 
-raw_text = "a photo of a beautiful girl"
+raw_text = "一只雄伟的大象优雅地站在阳光普照的草原上，它那纹理分明的灰色皮肤在午后温暖的金色阳光下闪闪发光。大象有着大而富有表现力的耳朵和微微弯曲的鼻子，正处于行走的姿态中，踢起一团尘土，向被茂密的绿色金合欢树环绕的波光粼粼的水坑走去。这幅场景以一种充满活力的印象派风格绘制，使用了丰富的泥土色调、柔和的绿色和温暖的黄色，唤起了一种宁静与自然相连的感觉。拍摄角度较低，捕捉到了大象在点缀着缕缕白云的广阔天空下的壮观景象。前景中，几朵色彩斑斓的野花盛开，增添了颜色的斑驳，而远处一群羚羊正在平静地吃草，增强了这片野外迷人时刻的宁静氛围。"
 
 with torch.no_grad():
     text_inputs = tokenizer_t5(
