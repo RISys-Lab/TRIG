@@ -772,29 +772,12 @@ class PEADiffusionModel(BaseModel):
         proj_path = self.get_model_path("diffusion_pytorch_model.bin", "PEADIFFUSION_PROJ_PATH")
         
         # MLP投影层
-        class MLP(nn.Module):
-            def __init__(self, in_dim=4096, out_dim=4096, hidden_dim=4096, out_dim1=768, use_residual=True):
-                super().__init__()
-                self.layernorm = nn.LayerNorm(in_dim)
-                self.projector = nn.Sequential(
-                    nn.Linear(in_dim, hidden_dim, bias=False),
-                    nn.GELU(),
-                    nn.Linear(hidden_dim, hidden_dim, bias=False),
-                    nn.GELU(),
-                    nn.Linear(hidden_dim, out_dim, bias=False),
-                )
-                self.fc = nn.Linear(out_dim, out_dim1)
-            
-            def forward(self, x):
-                x = self.layernorm(x)
-                x = self.projector(x)
-                x2 = nn.GELU()(x)
-                x1 = self.fc(x2)
-                x1 = torch.mean(x1, 1)
-                return x1, x2
+
         
         # 初始化组件
-        self.proj_t5 = MLP(in_dim=4672, out_dim=4096, hidden_dim=4096, out_dim1=768).to(device=device, dtype=self.dtype)
+        # 使用静态方法创建MLP
+        MLPClass = self._create_mlp_class()
+        self.proj_t5 = MLPClass().to(device=device, dtype=self.dtype)
         self.text_encoder_t5 = T5ForConditionalGeneration.from_pretrained(t5_path).get_encoder().to(device=device, dtype=self.dtype)
         self.tokenizer_t5 = AutoTokenizer.from_pretrained(t5_path)
         
@@ -825,8 +808,34 @@ class PEADiffusionModel(BaseModel):
         
         print(f"PEADiffusion model loaded successfully on {device}")
 
+    @staticmethod
+    def _create_mlp_class():
+        """创建MLP类的工厂方法"""
+        import torch.nn as nn
+        
+        class MLP(nn.Module):
+            def __init__(self, in_dim=4672, out_dim=4096, hidden_dim=4096, out_dim1=768, use_residual=True):
+                super().__init__()
+                self.layernorm = nn.LayerNorm(in_dim)
+                self.projector = nn.Sequential(
+                    nn.Linear(in_dim, hidden_dim, bias=False),
+                    nn.GELU(),
+                    nn.Linear(hidden_dim, hidden_dim, bias=False),
+                    nn.GELU(),
+                    nn.Linear(hidden_dim, out_dim, bias=False),
+                )
+                self.fc = nn.Linear(out_dim, out_dim1)
+            
+            def forward(self, x):
+                x = self.layernorm(x)
+                x = self.projector(x)
+                x2 = nn.GELU()(x)
+                x1 = self.fc(x2)
+                x1 = torch.mean(x1, 1)
+                return x1, x2
+        
+        return MLP
     def generate(self, prompt, **kwargs):
-        from diffusers import FluxPipeline, AutoencoderKL
         try:
             with torch.no_grad():
                 # 文本编码
@@ -859,7 +868,7 @@ class PEADiffusionModel(BaseModel):
                 
                 # VAE解码
                 vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels))
-                latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
+                latents = self.pipeline._unpack_latents(latents, height, width, vae_scale_factor)
                 latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
                 image = self.vae.decode(latents, return_dict=False)[0]
                 image = self.image_processor.postprocess(image, output_type="pil")
@@ -930,8 +939,8 @@ class X2IModel(BaseModel):
             from diffusers.image_processor import VaeImageProcessor
             from transformers import T5EncoderModel, T5TokenizerFast, CLIPTokenizer, CLIPTextModel, T5Config
             from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM, AutoProcessor, Qwen2_5_VLForConditionalGeneration
-            from trig.models.X2I.utils.proj import create_proj3_qwen3b, create_proj3_qwen7b
-            from qwen_vl_utils import process_vision_info
+            
+            
         except ImportError:
             raise ImportError("Required packages not available. Please install diffusers and transformers")
         
@@ -989,6 +998,7 @@ class X2IModel(BaseModel):
 
 
     def get_qwen_inputs_embeds(self, videos=None, images=None, text_prompt=None, proj=None):
+        from qwen_vl_utils import process_vision_info
         message = [{"role": "user", "content": []}]
         image_list = []
         if images is not None and len(images) > 0:
@@ -1035,7 +1045,7 @@ class X2IModel(BaseModel):
         return pooled_prompt_embeds, prompt_embeds
         
     def get_proj(self, proj_path):
-
+        from trig.models.X2I.utils.proj import create_proj3_qwen3b, create_proj3_qwen7b
         proj = create_proj3_qwen7b(in_channels=29, use_t5=False, use_scale=False, use_cnn=True)
 
 
