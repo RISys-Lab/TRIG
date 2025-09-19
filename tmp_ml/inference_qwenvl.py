@@ -329,6 +329,12 @@ def generate(pooled_prompt_embeds, prompt_embeds, outputs, filename, seed=None, 
     step_start = time.time()
     vae_scale_factor = 2 ** (len(vae.config.block_out_channels))
     image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor)
+    vae_scale_factor = pipeline.vae_scale_factor
+    image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor * 2)
+
+    latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
+    latents = (latents / vae.config.scaling_factor) + vae.config.shift_factor
+    image = vae.decode(latents, return_dict=False)[0]
 
     latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
     latents = (latents / vae.config.scaling_factor) + vae.config.shift_factor
