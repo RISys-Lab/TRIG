@@ -327,16 +327,21 @@ def generate(pooled_prompt_embeds, prompt_embeds, outputs, filename, seed=None, 
     # VAE解码
     print(f"      🖼️  [2/3] VAE解码...")
     step_start = time.time()
-    vae_scale_factor = 2 ** (len(vae.config.block_out_channels))
-    image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor)
     vae_scale_factor = pipeline.vae_scale_factor
     image_processor = VaeImageProcessor(vae_scale_factor=vae_scale_factor * 2)
 
-    latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
-    latents = (latents / vae.config.scaling_factor) + vae.config.shift_factor
-    image = vae.decode(latents, return_dict=False)[0]
-
-    latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
+    # 兼容不同diffusers版本：latent 可能是打包的3D [B, P, C]，也可能已解包为4D [B, C, H, W]
+    if isinstance(latents, (list, tuple)):
+        latents = latents[0]
+    if isinstance(latents, torch.Tensor):
+        if latents.ndim == 3:
+            latents = FluxPipeline._unpack_latents(latents, height, width, vae_scale_factor)
+        elif latents.ndim == 4:
+            pass
+        else:
+            raise ValueError(f"未知latent维度: {latents.shape}")
+    else:
+        raise TypeError(f"不支持的latent类型: {type(latents)}")
     latents = (latents / vae.config.scaling_factor) + vae.config.shift_factor
     image = vae.decode(latents, return_dict=False)[0]
     print(f"          ✅ VAE解码完成 ({time.time() - step_start:.2f}s)")
