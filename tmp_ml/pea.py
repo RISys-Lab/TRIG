@@ -28,8 +28,8 @@ class MLP(nn.Module):
 
 dtype = torch.bfloat16
 device = "cuda"
-ckpt_id = "black-forest-labs/FLUX.1-schnell"
-text_encoder_ckpt_id = 'google/byt5-xxl'
+ckpt_id = "/leonardo_scratch/fast/EUHPC_R04_192/fmohamma/fast_weights/FLUX.1-schnell"
+text_encoder_ckpt_id = '/leonardo_scratch/fast/EUHPC_R04_192/fmohamma/fast_weights/byt5-xxl'
 
 proj_t5 = MLP(in_dim=4672, out_dim=4096, hidden_dim=4096, out_dim1=768).to(device=device,dtype=dtype)
 print("loading text encoder")
@@ -37,7 +37,7 @@ text_encoder_t5 = T5ForConditionalGeneration.from_pretrained(text_encoder_ckpt_i
 tokenizer_t5 = AutoTokenizer.from_pretrained(text_encoder_ckpt_id)
 
 
-proj_t5_save_path = f"diffusion_pytorch_model.bin"
+proj_t5_save_path = f"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/MultilingualFLUX.1-adapter/diffusion_pytorch_model.bin"
 print("loading proj_t5")
 state_dict = torch.load(proj_t5_save_path, map_location="cpu")
 state_dict_new = {}
