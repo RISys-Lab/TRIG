@@ -80,7 +80,7 @@ with torch.no_grad():
     latents = pipeline(
         prompt_embeds=prompt_embeds, 
         pooled_prompt_embeds=pooled_prompt_embeds,
-        num_inference_steps=4, guidance_scale=0, 
+        num_inference_steps=28, guidance_scale=3, 
         height=height, width=width,
         output_type="latent",
     ).images
