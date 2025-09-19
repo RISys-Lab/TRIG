@@ -138,7 +138,7 @@ print(f"  📍 已放置在设备: {device_flux}")
 # 6. 加载VAE
 print(f"\n🖼️  [6/7] 加载VAE...")
 start_time = time.time()
-vae = AutoencoderKL.from_pretrained(flux_path, subfolder="vae", dtype=dtype).to(device_flux)
+vae = AutoencoderKL.from_pretrained(flux_path, subfolder="vae", torch_dtype=dtype).to(device_flux)
 print(f"  ✅ VAE加载完成 ({time.time() - start_time:.2f}s)")
 print(f"  📍 已放置在设备: {device_flux}")
 
