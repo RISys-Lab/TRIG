@@ -130,8 +130,15 @@ print(f"  📍 已放置在设备: {device_flux}")
 # 5. 加载FLUX Pipeline
 print(f"\n🌊 [5/7] 加载FLUX Pipeline...")
 start_time = time.time()
-pipeline = FluxPipeline.from_pretrained(flux_path, text_encoder=None, text_encoder_2=None,
-    tokenizer=None, tokenizer_2=None, vae=None, dtype=dtype).to(device_flux)
+pipeline = FluxPipeline.from_pretrained(
+    flux_path, 
+    text_encoder=None, 
+    text_encoder_2=None,
+    tokenizer=None, 
+    tokenizer_2=None, 
+    vae=None, 
+    torch_dtype=dtype
+).to(device_flux)
 print(f"  ✅ FLUX Pipeline加载完成 ({time.time() - start_time:.2f}s)")
 print(f"  📍 已放置在设备: {device_flux}")
 
