@@ -6,9 +6,6 @@ import json
 import argparse
 import time
 
-from tqdm import tqdm
-from openai import OpenAI
-
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -216,6 +213,11 @@ def create_prompt_message(image_content, dim1, dim2, dim1_desc, dim2_desc, dim1_
     return bias_message + prompt_message
 
 
+# --- Base mode ---
+
+from tqdm import tqdm
+from openai import OpenAI
+
 def send_request(messages, max_retries=5, delay=2):
     for attempt in range(max_retries):
         try:
@@ -317,12 +319,106 @@ def process_data(args, data_list):
 
                 response_content = send_request(main_message)
                 save_results(dim, dataset, image_path, response_content)
-            
-import random
+
+
+##############################
+
+
+# --- High Concurrency ---
+
+import asyncio
+from tqdm.asyncio import tqdm_asyncio
+from openai import AsyncOpenAI
+
+MAX_CONCURRENT_REQUESTS = 64
+semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+async def async_send_request(client, messages, max_retries=5, delay=2):
+    for attempt in range(max_retries):
+        try:
+            async with semaphore:
+                response = await client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages
+                )
+            response_content = response.choices[0].message.content
+            response_match = re.search(r"\{.*\}", response_content, re.DOTALL)
+            response_content = json.loads(response_match.group(0))
+            return response_content['responses']
+        
+        except Exception as e:
+            print(f"[Attempt {attempt+1}/{max_retries}] Request failed: {e}")
+            if attempt + 1 < max_retries:
+                wait_time = delay * (2 ** attempt)
+                await asyncio.sleep(wait_time)
+            else:
+                return None
+
+
+async def async_process_single_item(client, object, args, DIM_DICT, DIM_DESC, CORE_CONCEPTS):
+    try:
+        dataset = args.dataset
+        image_name = 'src_img_filename' if dataset == 'OmniEdit-Filtered' else 'input_images'
+        src_img_filename = object[image_name] if dataset == 'OmniEdit-Filtered' else object[image_name][0]
+        image_path = os.path.join(args.raw_path, dataset, src_img_filename)
+
+        base64_image, image_type = encode_image(image_path)
+        image_message = create_image_message(base64_image, image_type)
+
+        image_content = await async_send_request(client, image_message)
+        if image_content is None:
+            return {"error": f"Image content failed for {image_path}"}
+
+        for dim1, dim2_list in DIM_DICT.items():
+            for dim2 in dim2_list:
+                if dim1 == "R-T" or dim2 == "R-T":
+                    continue
+                dim = f"{dim1}_{dim2}"
+                dim1_desc = DIM_DESC[dim1]
+                dim2_desc = DIM_DESC[dim2]
+                dim1_core = CORE_CONCEPTS[dim1]
+                dim2_core = CORE_CONCEPTS[dim2]
+
+                main_message = create_prompt_message(
+                    image_content, dim1, dim2, dim1_desc, dim2_desc, dim1_core, dim2_core
+                )
+
+                response_content = await async_send_request(client, main_message)
+                if response_content:
+                    save_results(dim, dataset, image_path, response_content)
+
+        return {"success": image_path}
+
+    except Exception as e:
+        return {"error": str(e), "image_path": object.get(image_name, "unknown")}
+
+
+async def async_process_data(args, data_list):
+    dim_file = load_json('dimensions.json')
+    DIM_DICT = dim_file['DIM_DICT']
+    DIM_DESC = dim_file['DIM_DESC']
+    CORE_CONCEPTS = dim_file['CORE_CONCEPTS']
+
+    api_key = 'sk-mqUwZI8bhIv746rG6f3fE830D8B146E789Fd11717aD8C4B1'
+    client = AsyncOpenAI(api_key=api_key, base_url="https://api.bltcy.ai/v1")
+
+    tasks = [
+        async_process_single_item(client, obj, args, DIM_DICT, DIM_DESC, CORE_CONCEPTS)
+        for obj in data_list[50:100]
+    ]
+    results = await tqdm_asyncio.gather(*tasks)
+    return results
+
+         
 if __name__ == "__main__":
     args = get_args()
-    
     data_list = load_data(args)
-    process_data(args, data_list)
-    
+
+    async_mode = True
+    if async_mode:
+        print("Running in **async high-concurrency** mode with asyncio.")
+        asyncio.run(async_process_data(args, data_list))
+    else:
+        print("Running in **sync single-threaded** mode.")
+        process_data(args, data_list)
     
