@@ -341,12 +341,13 @@ def process_data(args, data_list):
     DIM_DESC = dim_file['DIM_DESC']
     CORE_CONCEPTS = dim_file['CORE_CONCEPTS']
 
+    raw_path = args.raw_path
     dataset = args.dataset
     image_name = 'img_filename' if dataset == 'Subjects200K' else 'input_images'
 
     for object in tqdm(data_list[:1], desc="Processing object", unit="image"):
         src_img_filename = object[image_name] if dataset == 'Subjects200K' else object[image_name][0]
-        image_path = os.path.join(args.raw_path, dataset, src_img_filename)
+        image_path = os.path.join(raw_path, dataset, src_img_filename)
         base64_image, image_type = encode_left_image(image_path) if dataset == 'Subjects200K' else encode_image(
             image_path)
 
@@ -409,10 +410,11 @@ async def async_send_request(client, messages, max_retries=5, delay=2):
 
 async def async_process_single_item(client, obj, args, DIM_DICT, DIM_DESC, CORE_CONCEPTS):
     try:
+        raw_path = args.raw_path
         dataset = args.dataset
         image_name = 'img_filename' if dataset == 'Subjects200K' else 'input_images'
         src_img_filename = obj[image_name] if dataset == 'Subjects200K' else obj[image_name][0]
-        image_path = os.path.join(args.raw_path, dataset, src_img_filename)
+        image_path = os.path.join(raw_path, dataset, src_img_filename)
 
         if dataset == 'Subjects200K':
             base64_image, image_type = encode_left_image(image_path)
