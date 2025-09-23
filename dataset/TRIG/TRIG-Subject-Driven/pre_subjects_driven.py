@@ -450,7 +450,7 @@ async def async_process_single_item(client, obj, args, DIM_DICT, DIM_DESC, CORE_
 
 
 async def async_process_data(args, data_list):
-    dim_file = load_json('dimensions.json')
+    dim_file = load_json('../dimensions.json')
     DIM_DICT = dim_file['DIM_DICT']
     DIM_DESC = dim_file['DIM_DESC']
     CORE_CONCEPTS = dim_file['CORE_CONCEPTS']
