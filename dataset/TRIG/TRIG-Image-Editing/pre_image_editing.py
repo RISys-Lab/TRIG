@@ -234,7 +234,6 @@ def send_request(messages, max_retries=5, delay=2):
             response_content = json.loads(response_match.group(0))
             response_content = response_content['responses']
 
-            print(response_content)
             return response_content
         
         except Exception as e:
@@ -294,8 +293,6 @@ def process_data(args, data_list):
     
     dataset = args.dataset
     image_name = 'src_img_filename' if dataset == 'OmniEdit-Filtered' else 'input_images'
-    # print(len(data_list))
-    # sampled_data = random.sample(data_list, 1)
     for object in tqdm(data_list[50:100], desc="Processing object", unit="image"):
         src_img_filename = object[image_name] if dataset == 'OmniEdit-Filtered' else object[image_name][0]
         image_path = os.path.join(args.raw_path, dataset, src_img_filename)
