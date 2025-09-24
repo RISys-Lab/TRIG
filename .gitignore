@@ -102,3 +102,4 @@ trig_multilingual/trig_multilingual.jsonl
 config/local_models.env
 leo.sh
 leo_ml.sh
+leo_eval.sh

@@ -17,7 +17,7 @@ class TRIGAPIMetric(BaseMetric):
         super().__init__(**kwargs)
         print(
             "Initializing TRIGGPTMetric, params: API_KEY: {}, endpoint: {}, model_name:{}, dimension: {}, top_logprobs: {}".format(
-                API_KEY, endpoint, model_name, self.dimension, top_logprobs))
+                API_KEY, endpoint, model_name, top_logprobs))
         self.top_logprobs = top_logprobs
         self.client = openai.Client(api_key=API_KEY, base_url=endpoint)
         self.task = None
@@ -93,15 +93,15 @@ class TRIGAPIMetric(BaseMetric):
                 top_logprobs=self.top_logprobs,
             )
 
-            print(completion.choices[0].message.content)
+            # print(completion.choices[0].message.content)
             top_logprobs = completion.choices[0].logprobs.content[0].top_logprobs
-            print('top_logprobs:', top_logprobs)
+            # print('top_logprobs:', top_logprobs)
             usage_tokens = [completion.usage.prompt_tokens, completion.usage.completion_tokens,
                             completion.usage.prompt_tokens + completion.usage.completion_tokens]
             # print('usage_tokens:', usage_tokens)
             score = self.logprobs_score(top_logprobs)
             score = round(score, 3)
-            print('score:', score)
+            # print('score:', score)
             return score
         except Exception as e:
             print(f"Error: {e}")
@@ -187,7 +187,7 @@ class TRIGAPIMetric(BaseMetric):
 
         return round(score, 3)
 
-    def compute_batch(self, task, promp_data, max_workers=10):
+    def compute_batch(self, task, promp_data, max_workers=20):
         """批量并行处理数据"""
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
@@ -207,15 +207,15 @@ class TRIGAPIMetric(BaseMetric):
                     'success': True
                 }
             except Exception as e:
-                print(f"Error processing {data['data_id']}: {e}")
+                # 减少错误输出的频率
                 return {
                     'data_id': data['data_id'],
                     'score': 0.0,
-                    'success': False
+                    'success': False,
+                    'error': str(e)
                 }
         
         results = {}
-        completed_count = 0
         total_count = len(promp_data)
         
         print(f"🚀 Starting parallel processing with {max_workers} workers...")
@@ -224,16 +224,23 @@ class TRIGAPIMetric(BaseMetric):
             # 提交所有任务
             future_to_data = {executor.submit(process_single_item, data): data for data in promp_data}
             
-            # 收集结果
-            for future in as_completed(future_to_data):
-                result = future.result()
-                results[result['data_id']] = result['score']
-                
-                completed_count += 1
-                if result['success']:
-                    print(f"✅ [{completed_count}/{total_count}] {result['data_id']}: {result['score']:.3f}")
-                else:
-                    print(f"❌ [{completed_count}/{total_count}] {result['data_id']}: Failed")
+            # 使用tqdm显示进度
+            with tqdm(total=total_count, desc="Processing", unit="item") as pbar:
+                # 收集结果
+                for future in as_completed(future_to_data):
+                    result = future.result()
+                    results[result['data_id']] = result['score']
+                    
+                    # 更新进度条
+                    if result['success']:
+                        pbar.set_postfix({'score': f"{result['score']:.3f}", 'id': result['data_id']})
+                    else:
+                        pbar.set_postfix({'status': 'FAILED', 'id': result['data_id']})
+                    pbar.update(1)
+        
+        # 统计成功失败数量
+        success_count = sum(1 for data_id in results if results[data_id] > 0)
+        print(f"✅ Completed: {success_count}/{total_count} successful, {total_count - success_count} failed")
         
         return results
 
@@ -242,17 +249,41 @@ if __name__ == "__main__":
     import os
     import csv
     import sys
+    import argparse
+    
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="TRIG API Metric Evaluation")
+    parser.add_argument("--model_name", type=str)
+    parser.add_argument("--endpoint", type=str, default="http://localhost:8000/v1/",
+                       help="vLLM endpoint URL")
+    parser.add_argument("--max_workers", type=int, default=30,
+                       help="Maximum number of parallel workers")
+    parser.add_argument("--save_interval", type=int, default=50,
+                       help="Save progress every N items")
+    
+    args = parser.parse_args()
+    
+    # 根据model_name自动拼接路径
+    model_name = args.model_name
+    base_dir = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG"
     
     # Example usage
     metric = TRIGAPIMetric(API_KEY="EMPTY", 
                            model_name="/leonardo_scratch/fast/EUHPC_R04_192/fmohamma/fast_weights/Qwen2.5-VL-72B-Instruct-AWQ",
-                           endpoint="http://localhost:8000/v1/", 
-                           dimension='TA-C',
+                           endpoint=args.endpoint,
                            top_logprobs=5)
     
-    image_dir = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/flux"
-    prompt_file = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json"
-    output_csv = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/result/trigscore/flux.csv"
+    # 自动拼接路径
+    image_dir = f"{base_dir}/data/output/t2i_ml/{model_name}"
+    prompt_file = f"{base_dir}/dataset/TRIG-multilingual/text-to-image-multilingual.json"
+    output_csv = f"{base_dir}/data/result/trigscore/{model_name}.csv"
+    
+    print(f"🔧 Configuration:")
+    print(f"   Model: {model_name}")
+    print(f"   Image dir: {image_dir}")
+    print(f"   Output CSV: {output_csv}")
+    print(f"   Max workers: {args.max_workers}")
+    print(f"   Save interval: {args.save_interval}")
     
     # 加载数据
     annotation_data = json.load(open(prompt_file, "r"))
@@ -301,7 +332,7 @@ if __name__ == "__main__":
         results_dict = completed_results
     else:
         # 创建一个带进度保存的包装函数
-        def process_with_progress_save(batch_data, save_interval=50):
+        def process_with_progress_save(batch_data, save_interval=50, max_workers=20):
             """处理数据并定期保存进度"""
             from concurrent.futures import ThreadPoolExecutor, as_completed
             
@@ -310,55 +341,63 @@ if __name__ == "__main__":
                     score = metric.compute(data['gen_image_path'], data['prompt'], data['data_id'])
                     return {'data_id': data['data_id'], 'score': score, 'success': True}
                 except Exception as e:
-                    print(f"Error processing {data['data_id']}: {e}")
-                    return {'data_id': data['data_id'], 'score': 0.0, 'success': False}
+                    return {'data_id': data['data_id'], 'score': 0.0, 'success': False, 'error': str(e)}
             
             new_results = {}
             completed_count = 0
             total_count = len(batch_data)
             
-            print(f"🚀 Starting processing with progress save every {save_interval} items...")
+            print(f"🚀 Starting processing with {max_workers} workers, progress save every {save_interval} items...")
             
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_data = {executor.submit(process_single_item, data): data for data in batch_data}
                 
-                for future in as_completed(future_to_data):
-                    result = future.result()
-                    new_results[result['data_id']] = result['score']
-                    
-                    completed_count += 1
-                    total_completed = len(completed_results) + completed_count
-                    
-                    if result['success']:
-                        print(f"✅ [{total_completed}/{len(all_batch_data)}] {result['data_id']}: {result['score']:.3f}")
-                    else:
-                        print(f"❌ [{total_completed}/{len(all_batch_data)}] {result['data_id']}: Failed")
-                    
-                    # 定期保存进度 - 使用原子性写入
-                    if completed_count % save_interval == 0:
-                        current_results = {**completed_results, **new_results}
-                        temp_results = [{'data_id': data_id, 'score': score} for data_id, score in current_results.items()]
+                with tqdm(total=total_count, desc="Processing", unit="item") as pbar:
+                    for future in as_completed(future_to_data):
+                        result = future.result()
+                        new_results[result['data_id']] = result['score']
                         
-                        print(f"💾 Saving progress... ({total_completed}/{len(all_batch_data)})")
+                        completed_count += 1
+                        total_completed = len(completed_results) + completed_count
                         
-                        # 原子性写入
-                        temp_file = output_csv + '.tmp'
-                        try:
-                            with open(temp_file, 'w', newline='', encoding='utf-8') as f:
-                                writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
-                                writer.writeheader()
-                                writer.writerows(sorted(temp_results, key=lambda x: x['data_id']))
-                            os.replace(temp_file, output_csv)
-                            print(f"✅ Progress saved successfully")
-                        except Exception as e:
-                            print(f"⚠️  Warning: Failed to save progress: {e}")
-                            if os.path.exists(temp_file):
-                                os.remove(temp_file)
+                        # 更新进度条
+                        if result['success']:
+                            pbar.set_postfix({
+                                'score': f"{result['score']:.3f}", 
+                                'total': f"{total_completed}/{len(all_batch_data)}"
+                            })
+                        else:
+                            pbar.set_postfix({
+                                'status': 'FAILED', 
+                                'total': f"{total_completed}/{len(all_batch_data)}"
+                            })
+                        pbar.update(1)
+                        
+                        # 定期保存进度 - 使用原子性写入
+                        if completed_count % save_interval == 0:
+                            current_results = {**completed_results, **new_results}
+                            temp_results = [{'data_id': data_id, 'score': score} for data_id, score in current_results.items()]
+                            
+                            pbar.write(f"💾 Saving progress... ({total_completed}/{len(all_batch_data)})")
+                            
+                            # 原子性写入
+                            temp_file = output_csv + '.tmp'
+                            try:
+                                with open(temp_file, 'w', newline='', encoding='utf-8') as f:
+                                    writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
+                                    writer.writeheader()
+                                    writer.writerows(sorted(temp_results, key=lambda x: x['data_id']))
+                                os.replace(temp_file, output_csv)
+                                pbar.write(f"✅ Progress saved successfully")
+                            except Exception as e:
+                                pbar.write(f"⚠️  Warning: Failed to save progress: {e}")
+                                if os.path.exists(temp_file):
+                                    os.remove(temp_file)
             
             return new_results
         
         # 使用带进度保存的处理函数
-        new_results = process_with_progress_save(remaining_data, save_interval=50)
+        new_results = process_with_progress_save(remaining_data, save_interval=args.save_interval, max_workers=args.max_workers)
         
         # 合并已完成和新完成的结果
         results_dict = {**completed_results, **new_results}
