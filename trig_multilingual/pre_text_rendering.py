@@ -18,7 +18,6 @@ def get_args():
 
 
 def load_data(args):
-    os.environ["HF_TOKEN"] = "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"
     dataset = load_dataset("lllrrnn/EasyText")
     
     subset = [
@@ -101,7 +100,7 @@ def send_request(messages, max_retries=5, delay=2):
     for attempt in range(max_retries):
         try:
             print("Sending request...")
-            api_key = 'AIzaSyBIWvi7ZY1arEcZzZkZLExSNun8z2c_8-k'
+            api_key = '  '
             client = OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
             
             response = client.chat.completions.create(
@@ -203,7 +202,7 @@ async def async_process_single_item(client, idx, obj):
 
 
 async def async_process_data(data_list):
-    api_key = 'AIzaSyBIWvi7ZY1arEcZzZkZLExSNun8z2c_8-k'
+    api_key = '  '
     client = AsyncOpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
 
     tasks = [

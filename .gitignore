@@ -93,6 +93,12 @@ dataset/Trig/Trig-image-editing/*.json
 dataset/Trig/HF/
 dataset/TRIG-multilingual/
 
+dataset/raw_dataset/character
+dataset/raw_dataset/image-editing/toxigen
+dataset/Trig/Trig-image-editing/toxigen
+
+trig_multilingual/trig_multilingual.jsonl
+
 config/local_models.env
 leo.sh
 leo_ml.sh
