@@ -241,6 +241,7 @@ class TRIGAPIMetric(BaseMetric):
 if __name__ == "__main__":
     import os
     import csv
+    import sys
     
     # Example usage
     metric = TRIGAPIMetric(API_KEY="EMPTY", 
@@ -249,9 +250,9 @@ if __name__ == "__main__":
                            dimension='TA-C',
                            top_logprobs=5)
     
-    image_dir = r"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/flux"
-    prompt_file = r"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/flux/prompt.json"
-    output_csv = r"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/result/trigscore/flux.csv"
+    image_dir = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/flux"
+    prompt_file = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json"
+    output_csv = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/result/trigscore/flux.csv"
     
     # 加载数据
     annotation_data = json.load(open(prompt_file, "r"))
@@ -271,13 +272,23 @@ if __name__ == "__main__":
     
     # 准备批量数据（符合compute_batch接口）
     all_batch_data = []
+    skipped_r_count = 0
+    
     for data_i in annotation_data:
+        # 跳过以 "R" 开头的 data_id
+        if data_i["data_id"].startswith("R"):
+            skipped_r_count += 1
+            continue
+            
         image_path = os.path.join(image_dir, data_i["image_path"] + '.png')
         all_batch_data.append({
             'data_id': data_i["data_id"],
             'prompt': data_i["prompt"],
             'gen_image_path': image_path
         })
+    
+    if skipped_r_count > 0:
+        print(f"⏭️  Skipped {skipped_r_count} items with data_id starting with 'R'")
     
     # 过滤出未完成的数据
     remaining_data = [data for data in all_batch_data if data['data_id'] not in completed_results]
@@ -323,16 +334,26 @@ if __name__ == "__main__":
                     else:
                         print(f"❌ [{total_completed}/{len(all_batch_data)}] {result['data_id']}: Failed")
                     
-                    # 定期保存进度
+                    # 定期保存进度 - 使用原子性写入
                     if completed_count % save_interval == 0:
                         current_results = {**completed_results, **new_results}
                         temp_results = [{'data_id': data_id, 'score': score} for data_id, score in current_results.items()]
                         
                         print(f"💾 Saving progress... ({total_completed}/{len(all_batch_data)})")
-                        with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-                            writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
-                            writer.writeheader()
-                            writer.writerows(sorted(temp_results, key=lambda x: x['data_id']))
+                        
+                        # 原子性写入
+                        temp_file = output_csv + '.tmp'
+                        try:
+                            with open(temp_file, 'w', newline='', encoding='utf-8') as f:
+                                writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
+                                writer.writeheader()
+                                writer.writerows(sorted(temp_results, key=lambda x: x['data_id']))
+                            os.replace(temp_file, output_csv)
+                            print(f"✅ Progress saved successfully")
+                        except Exception as e:
+                            print(f"⚠️  Warning: Failed to save progress: {e}")
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
             
             return new_results
         
@@ -345,14 +366,23 @@ if __name__ == "__main__":
     # 转换为列表格式并保存
     results = [{'data_id': data_id, 'score': score} for data_id, score in results_dict.items()]
     
-    # 保存到CSV
-    print(f"💾 Saving results to {output_csv}")
+    # 原子性保存到CSV
+    print(f"💾 Saving final results to {output_csv}")
     os.makedirs(os.path.dirname(output_csv), exist_ok=True)
     
-    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
-        writer.writeheader()
-        writer.writerows(sorted(results, key=lambda x: x['data_id']))
+    temp_file = output_csv + '.tmp'
+    try:
+        with open(temp_file, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
+            writer.writeheader()
+            writer.writerows(sorted(results, key=lambda x: x['data_id']))
+        os.replace(temp_file, output_csv)
+        print(f"✅ Final results saved successfully")
+    except Exception as e:
+        print(f"❌ Error saving final results: {e}")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        raise
     
     print(f"✅ Processing complete! Results saved to {output_csv}")
     print(f"📊 Processed {len(results)} images")
