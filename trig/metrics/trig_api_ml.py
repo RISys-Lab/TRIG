@@ -195,7 +195,7 @@ class TRIGAPIMetric(BaseMetric):
             # FIXME : add general interface
             raise ValueError("task is None")
 
-        self.task = task
+            self.task = task
         
         def process_single_item(data):
             """处理单个数据项"""
@@ -215,7 +215,7 @@ class TRIGAPIMetric(BaseMetric):
                     'error': str(e)
                 }
         
-        results = {}
+            results = {}
         total_count = len(promp_data)
         
         print(f"🚀 Starting parallel processing with {max_workers} workers...")
@@ -304,6 +304,9 @@ if __name__ == "__main__":
     # 准备批量数据（符合compute_batch接口）
     all_batch_data = []
     skipped_r_count = 0
+    png_count = 0
+    jpg_count = 0
+    missing_count = 0
     
     for data_i in annotation_data:
         # 跳过以 "R" 开头的 data_id
@@ -311,15 +314,36 @@ if __name__ == "__main__":
             skipped_r_count += 1
             continue
             
-        image_path = os.path.join(image_dir, data_i["data_id"] + '.png')
+        # 检查png和jpg两种格式
+        png_path = os.path.join(image_dir, data_i["data_id"] + '.png')
+        jpg_path = os.path.join(image_dir, data_i["data_id"] + '.jpg')
+        
+        if os.path.exists(png_path):
+            image_path = png_path
+            png_count += 1
+        elif os.path.exists(jpg_path):
+            image_path = jpg_path
+            jpg_count += 1
+        else:
+            # 如果两种格式都不存在，默认使用png路径（会在处理时报错）
+            image_path = png_path
+            missing_count += 1
+        
         all_batch_data.append({
             'data_id': data_i["data_id"],
             'prompt': data_i["prompt"],
             'gen_image_path': image_path
         })
     
+    # 统计信息
     if skipped_r_count > 0:
         print(f"⏭️  Skipped {skipped_r_count} items with data_id starting with 'R'")
+    
+    print(f"📊 Image format statistics:")
+    print(f"   PNG files: {png_count}")
+    print(f"   JPG files: {jpg_count}")
+    if missing_count > 0:
+        print(f"   ⚠️  Missing files: {missing_count}")
     
     # 过滤出未完成的数据
     remaining_data = [data for data in all_batch_data if data['data_id'] not in completed_results]
