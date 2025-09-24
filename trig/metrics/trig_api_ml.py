@@ -16,7 +16,7 @@ class TRIGAPIMetric(BaseMetric):
                  temperature=1.0, **kwargs):
         super().__init__(**kwargs)
         print(
-            "Initializing TRIGGPTMetric, params: API_KEY: {}, endpoint: {}, model_name:{}, dimension: {}, top_logprobs: {}".format(
+            "Initializing TRIGGPTMetric, params: API_KEY: {}, endpoint: {}, model_name:{}, top_logprobs: {}".format(
                 API_KEY, endpoint, model_name, top_logprobs))
         self.top_logprobs = top_logprobs
         self.client = openai.Client(api_key=API_KEY, base_url=endpoint)
