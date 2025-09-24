@@ -280,7 +280,7 @@ if __name__ == "__main__":
             skipped_r_count += 1
             continue
             
-        image_path = os.path.join(image_dir, data_i["image_path"] + '.png')
+        image_path = os.path.join(image_dir, data_i["data_id"] + '.png')
         all_batch_data.append({
             'data_id': data_i["data_id"],
             'prompt': data_i["prompt"],
