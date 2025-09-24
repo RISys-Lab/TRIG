@@ -187,24 +187,177 @@ class TRIGAPIMetric(BaseMetric):
 
         return round(score, 3)
 
-    def compute_batch(self, task, promp_data):
+    def compute_batch(self, task, promp_data, max_workers=10):
+        """批量并行处理数据"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
         if task is None:
             # FIXME : add general interface
             raise ValueError("task is None")
 
-        else:
-            self.task = task
-            results = {}
-            for data in tqdm(promp_data):
-                results[data['data_id']] = self.compute(data['gen_image_path'], data['prompt'], data['data_id'])
-            return results
+        self.task = task
+        
+        def process_single_item(data):
+            """处理单个数据项"""
+            try:
+                score = self.compute(data['gen_image_path'], data['prompt'], data['data_id'])
+                return {
+                    'data_id': data['data_id'],
+                    'score': score,
+                    'success': True
+                }
+            except Exception as e:
+                print(f"Error processing {data['data_id']}: {e}")
+                return {
+                    'data_id': data['data_id'],
+                    'score': 0.0,
+                    'success': False
+                }
+        
+        results = {}
+        completed_count = 0
+        total_count = len(promp_data)
+        
+        print(f"🚀 Starting parallel processing with {max_workers} workers...")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            future_to_data = {executor.submit(process_single_item, data): data for data in promp_data}
+            
+            # 收集结果
+            for future in as_completed(future_to_data):
+                result = future.result()
+                results[result['data_id']] = result['score']
+                
+                completed_count += 1
+                if result['success']:
+                    print(f"✅ [{completed_count}/{total_count}] {result['data_id']}: {result['score']:.3f}")
+                else:
+                    print(f"❌ [{completed_count}/{total_count}] {result['data_id']}: Failed")
+        
+        return results
 
 
 if __name__ == "__main__":
+    import os
+    import csv
+    
     # Example usage
-    metric = TRIGAPIMetric(API_KEY="EMPTY", model_name="/leonardo_scratch/fast/EUHPC_R04_192/fmohamma/fast_weights/Qwen2.5-VL-72B-Instruct-AWQ",
-                           endpoint="http://localhost:8000/v1/", dimension='TA-C',
-                           top_logprobs=5, )
-    image_path = r"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/flux/IQ-R_en_1.png"
-    prompt = "A scenic view of a mountain landscape during sunrise, with vibrant colors and dramatic lighting."
-    score = metric.compute(image_path, prompt, "IQ-R_en_1")
+    metric = TRIGAPIMetric(API_KEY="EMPTY", 
+                           model_name="/leonardo_scratch/fast/EUHPC_R04_192/fmohamma/fast_weights/Qwen2.5-VL-72B-Instruct-AWQ",
+                           endpoint="http://localhost:8000/v1/", 
+                           dimension='TA-C',
+                           top_logprobs=5)
+    
+    image_dir = r"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/flux"
+    prompt_file = r"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/flux/prompt.json"
+    output_csv = r"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/result/trigscore/flux.csv"
+    
+    # 加载数据
+    annotation_data = json.load(open(prompt_file, "r"))
+    
+    # 检查是否有已完成的结果（断点续传）
+    completed_results = {}
+    if os.path.exists(output_csv):
+        print(f"📂 Found existing results file: {output_csv}")
+        try:
+            with open(output_csv, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    completed_results[row['data_id']] = float(row['score'])
+            print(f"✅ Loaded {len(completed_results)} existing results")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not load existing results: {e}")
+    
+    # 准备批量数据（符合compute_batch接口）
+    all_batch_data = []
+    for data_i in annotation_data:
+        image_path = os.path.join(image_dir, data_i["image_path"] + '.png')
+        all_batch_data.append({
+            'data_id': data_i["data_id"],
+            'prompt': data_i["prompt"],
+            'gen_image_path': image_path
+        })
+    
+    # 过滤出未完成的数据
+    remaining_data = [data for data in all_batch_data if data['data_id'] not in completed_results]
+    
+    print(f"📊 Progress: {len(completed_results)}/{len(all_batch_data)} already completed")
+    print(f"🔄 Processing {len(remaining_data)} remaining items...")
+    
+    if not remaining_data:
+        print("🎉 All items already completed!")
+        results_dict = completed_results
+    else:
+        # 创建一个带进度保存的包装函数
+        def process_with_progress_save(batch_data, save_interval=50):
+            """处理数据并定期保存进度"""
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            
+            def process_single_item(data):
+                try:
+                    score = metric.compute(data['gen_image_path'], data['prompt'], data['data_id'])
+                    return {'data_id': data['data_id'], 'score': score, 'success': True}
+                except Exception as e:
+                    print(f"Error processing {data['data_id']}: {e}")
+                    return {'data_id': data['data_id'], 'score': 0.0, 'success': False}
+            
+            new_results = {}
+            completed_count = 0
+            total_count = len(batch_data)
+            
+            print(f"🚀 Starting processing with progress save every {save_interval} items...")
+            
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_data = {executor.submit(process_single_item, data): data for data in batch_data}
+                
+                for future in as_completed(future_to_data):
+                    result = future.result()
+                    new_results[result['data_id']] = result['score']
+                    
+                    completed_count += 1
+                    total_completed = len(completed_results) + completed_count
+                    
+                    if result['success']:
+                        print(f"✅ [{total_completed}/{len(all_batch_data)}] {result['data_id']}: {result['score']:.3f}")
+                    else:
+                        print(f"❌ [{total_completed}/{len(all_batch_data)}] {result['data_id']}: Failed")
+                    
+                    # 定期保存进度
+                    if completed_count % save_interval == 0:
+                        current_results = {**completed_results, **new_results}
+                        temp_results = [{'data_id': data_id, 'score': score} for data_id, score in current_results.items()]
+                        
+                        print(f"💾 Saving progress... ({total_completed}/{len(all_batch_data)})")
+                        with open(output_csv, 'w', newline='', encoding='utf-8') as f:
+                            writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
+                            writer.writeheader()
+                            writer.writerows(sorted(temp_results, key=lambda x: x['data_id']))
+            
+            return new_results
+        
+        # 使用带进度保存的处理函数
+        new_results = process_with_progress_save(remaining_data, save_interval=50)
+        
+        # 合并已完成和新完成的结果
+        results_dict = {**completed_results, **new_results}
+    
+    # 转换为列表格式并保存
+    results = [{'data_id': data_id, 'score': score} for data_id, score in results_dict.items()]
+    
+    # 保存到CSV
+    print(f"💾 Saving results to {output_csv}")
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+    
+    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
+        writer.writeheader()
+        writer.writerows(sorted(results, key=lambda x: x['data_id']))
+    
+    print(f"✅ Processing complete! Results saved to {output_csv}")
+    print(f"📊 Processed {len(results)} images")
+    
+    
+    print(f"📈 Score statistics:")
+    print(f"  CSV saved to: {output_csv}")
+    
