@@ -8,6 +8,20 @@ import time
 from datasets import load_dataset
 
 
+LANG_DICT = {
+    "English": "en",
+    "Chinese": "zh",
+    "Hindi": "hi",
+    "Spanish": "es",
+    "Arabic": "ar",
+    "French": "fr",
+    "Portuguese": "pt",
+    "Russian": "ru",
+    "Japanese": "ja",
+    "Korean": "ko",
+}
+
+
 def get_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument("--raw_path",default=r'H:\ProjectsPro\TRIG\dataset\raw_dataset\text-rendering', type=str)
@@ -128,24 +142,29 @@ def process_data(data_list):
     
     results = []    
     for idx, object in enumerate(tqdm(data_list[:300], desc="Processing object", unit="image")):
-        text_id = f'multi_lingual_{idx:04d}'
         text = object['text']
         
         image = object['condition_image']
         base64_image, image_type = encode_image(image)
         ocr_message = create_ocr_message(base64_image, image_type)
-        ocr_content = send_request(ocr_message)
+        ocr_contents = send_request(ocr_message)
 
-        content = {
-            "id": text_id,
-            "text": text,
-            "multi_lingual": ocr_content
-        }
-        results.append(content)
+        for lang, ocr_content in ocr_contents.items():
+            data_id = f'TR_{LANG_DICT[lang].lower()}_{str(idx)}'            
+            content = {
+                "data_id": data_id,
+                # "item": None,
+                "prompt": text,
+                "dimension_prompt": [ocr_content, ""],
+                "parent_dataset": ["EasyText", "Origin"],
+                "img_id": f'{data_id}.jpg',
+                "dimensions": ["TR", LANG_DICT[lang].lower()],
+                # "image": None,
+            }
+            results.append(content)
     
-    with open('trig_multilingual.jsonl', 'w', encoding='utf-8') as f:
-        for r in results:
-            f.write(json.dumps(r, ensure_ascii=False) + '\n')
+    with open("trig_multilingual.json", 'w', encoding='utf-8') as file:
+        json.dump(results, file, ensure_ascii=False, indent=4)
 
 
 ##############################
@@ -184,21 +203,35 @@ async def async_send_request(client, messages, max_retries=5, delay=2):
 
 async def async_process_single_item(client, idx, obj):
     try:
-        text_id = f'multi_lingual_{idx:04d}'
         text = obj['text']
-
+        
         image = obj['condition_image']
         base64_image, image_type = encode_image(image)
         ocr_message = create_ocr_message(base64_image, image_type)
+        ocr_contents = await async_send_request(client, ocr_message)
+        
+        if ocr_contents is None:
+            return []
 
-        ocr_content = await async_send_request(client, ocr_message)
-        if ocr_content is None:
-            return {"id": text_id, "text": text, "multi_lingual": {"error": "request_failed"}}
-
-        return {"id": text_id, "text": text, "multi_lingual": ocr_content}
+        results = []
+        for lang, ocr_content in ocr_contents.items():
+            data_id = f'TR_{LANG_DICT[lang].lower()}_{str(idx)}'            
+            content = {
+                "data_id": data_id,
+                # "item": None,
+                "prompt": text,
+                "dimension_prompt": [ocr_content, ""],
+                "parent_dataset": ["EasyText", "Origin"],
+                "img_id": f'{data_id}.jpg',
+                "dimensions": ["TR", LANG_DICT[lang].lower()],
+                # "image": None,
+            }
+            results.append(content)
+        
+        return results
 
     except Exception as e:
-        return {"id": f"error_{idx}", "error": str(e)}
+        return [{"data_id": f"error_{idx}", "error": str(e)}]
 
 
 async def async_process_data(data_list):
@@ -209,13 +242,15 @@ async def async_process_data(data_list):
         async_process_single_item(client, idx, obj)
         for idx, obj in enumerate(data_list[:300])
     ]
-    results = await tqdm_asyncio.gather(*tasks)
+    results_list = await tqdm_asyncio.gather(*tasks)
 
-    with open('trig_multilingual.jsonl', 'w', encoding='utf-8') as f:
-        for r in results:
-            f.write(json.dumps(r, ensure_ascii=False) + '\n')
+    # Flatten the results since each item now returns a list of content entries
+    results = []
+    for result_list in results_list:
+        results.extend(result_list)
 
-    return results
+    with open("trig_multilingual.json", 'w', encoding='utf-8') as file:
+        json.dump(results, file, ensure_ascii=False, indent=4)
 
 
 if __name__ == "__main__":
