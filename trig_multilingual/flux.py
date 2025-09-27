@@ -31,7 +31,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 print(f"📦 Loading FLUX model: {MODEL_NAME}")
 print("⏳ This may take a few minutes for the first time...")
 
-pipe = FluxPipeline.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
+pipe = FluxPipeline.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).to("cuda")
 
 
 
@@ -52,7 +52,7 @@ def generate_image(prompt, data_id, output_dir):
             guidance_scale=guidance_scale,
             num_inference_steps=num_inference_steps,
             max_sequence_length=max_sequence_length,
-            generator=torch.Generator("cpu").manual_seed(42)  # 使用CPU generator以保持一致性
+            generator=torch.Generator("cuda").manual_seed(42)  # 使用CPU generator以保持一致性
         ).images[0]
         
         # 保存图像

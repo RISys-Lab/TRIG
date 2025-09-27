@@ -7,12 +7,17 @@ import os
 from tqdm import tqdm
 
 # 配置
-JSON_FILE = "/home/muzammal/Projects/TRIG/dataset/TRIG-multilingual/trig_multilingual.json"
+JSON_FILE = "/home/muzammal/Projects/TRIG/dataset/TRIG-multilingual/trig_multilingual_tr.json"
 OUTPUT_DIR = "/home/muzammal/Projects/TRIG/data/output/tr_ml/nanobanana"
 MODEL_NAME = "gemini-2.5-flash-image-preview"
 
 # 创建输出目录
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def check_existing_image(data_id, output_dir):
+    """检查图片是否已存在"""
+    output_path = os.path.join(output_dir, f"{data_id}.png")
+    return os.path.exists(output_path)
 
 # 初始化客户端
 client = genai.Client()
@@ -58,6 +63,10 @@ def main():
         data_id = item["data_id"]
         prompt = item["prompt"]
         dimension_prompt = item["dimension_prompt"]
+        
+        # 检查是否跳过已存在的图片
+        if check_existing_image(data_id, OUTPUT_DIR):
+            continue
         
         # 替换 <sks1> 为 dimension_prompt[0]
         if dimension_prompt and len(dimension_prompt) > 0:
