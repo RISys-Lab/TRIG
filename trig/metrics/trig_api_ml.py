@@ -102,10 +102,16 @@ class TRIGAPIMetric(BaseMetric):
             score = self.logprobs_score(top_logprobs)
             score = round(score, 3)
             # print('score:', score)
+            
+            # 检查分数是否为0，如果是则认为是连接问题
+            if score == 0.0:
+                raise ConnectionError(f"Score is 0.0 for {data_id}, indicating potential connection issue with model")
+            
             return score
         except Exception as e:
             print(f"Error: {e}")
-            return 0.0
+            # 抛出异常而不是返回0.0，让上层处理
+            raise e
 
     def logprobs_score(self, top_logprobs, confidence: bool = False) -> float:
         import math
@@ -206,8 +212,13 @@ class TRIGAPIMetric(BaseMetric):
                     'score': score,
                     'success': True
                 }
+            except ConnectionError as e:
+                # 连接错误，中断整个处理过程
+                print(f"🚨 Connection error detected: {e}")
+                print("🛑 Stopping all processing due to connection issue...")
+                raise e
             except Exception as e:
-                # 减少错误输出的频率
+                # 其他错误，继续处理
                 return {
                     'data_id': data['data_id'],
                     'score': 0.0,
@@ -220,23 +231,28 @@ class TRIGAPIMetric(BaseMetric):
         
         print(f"🚀 Starting parallel processing with {max_workers} workers...")
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 提交所有任务
-            future_to_data = {executor.submit(process_single_item, data): data for data in promp_data}
-            
-            # 使用tqdm显示进度
-            with tqdm(total=total_count, desc="Processing", unit="item") as pbar:
-                # 收集结果
-                for future in as_completed(future_to_data):
-                    result = future.result()
-                    results[result['data_id']] = result['score']
-                    
-                    # 更新进度条
-                    if result['success']:
-                        pbar.set_postfix({'score': f"{result['score']:.3f}", 'id': result['data_id']})
-                    else:
-                        pbar.set_postfix({'status': 'FAILED', 'id': result['data_id']})
-                    pbar.update(1)
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # 提交所有任务
+                future_to_data = {executor.submit(process_single_item, data): data for data in promp_data}
+                
+                # 使用tqdm显示进度
+                with tqdm(total=total_count, desc="Processing", unit="item") as pbar:
+                    # 收集结果
+                    for future in as_completed(future_to_data):
+                        result = future.result()
+                        results[result['data_id']] = result['score']
+                        
+                        # 更新进度条
+                        if result['success']:
+                            pbar.set_postfix({'score': f"{result['score']:.3f}", 'id': result['data_id']})
+                        else:
+                            pbar.set_postfix({'status': 'FAILED', 'id': result['data_id']})
+                        pbar.update(1)
+        except ConnectionError as e:
+            # 连接错误时立即停止处理
+            print(f"❌ Processing stopped due to connection error: {e}")
+            raise e
         
         # 统计成功失败数量
         success_count = sum(1 for data_id in results if results[data_id] > 0)
@@ -364,6 +380,11 @@ if __name__ == "__main__":
                 try:
                     score = metric.compute(data['gen_image_path'], data['prompt'], data['data_id'])
                     return {'data_id': data['data_id'], 'score': score, 'success': True}
+                except ConnectionError as e:
+                    # 连接错误，中断整个处理过程
+                    print(f"🚨 Connection error detected: {e}")
+                    print("🛑 Stopping all processing due to connection issue...")
+                    raise e
                 except Exception as e:
                     return {'data_id': data['data_id'], 'score': 0.0, 'success': False, 'error': str(e)}
             
@@ -373,50 +394,55 @@ if __name__ == "__main__":
             
             print(f"🚀 Starting processing with {max_workers} workers, progress save every {save_interval} items...")
             
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_data = {executor.submit(process_single_item, data): data for data in batch_data}
-                
-                with tqdm(total=total_count, desc="Processing", unit="item") as pbar:
-                    for future in as_completed(future_to_data):
-                        result = future.result()
-                        new_results[result['data_id']] = result['score']
-                        
-                        completed_count += 1
-                        total_completed = len(completed_results) + completed_count
-                        
-                        # 更新进度条
-                        if result['success']:
-                            pbar.set_postfix({
-                                'score': f"{result['score']:.3f}", 
-                                'total': f"{total_completed}/{len(all_batch_data)}"
-                            })
-                        else:
-                            pbar.set_postfix({
-                                'status': 'FAILED', 
-                                'total': f"{total_completed}/{len(all_batch_data)}"
-                            })
-                        pbar.update(1)
-                        
-                        # 定期保存进度 - 使用原子性写入
-                        if completed_count % save_interval == 0:
-                            current_results = {**completed_results, **new_results}
-                            temp_results = [{'data_id': data_id, 'score': score} for data_id, score in current_results.items()]
+            try:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_data = {executor.submit(process_single_item, data): data for data in batch_data}
+                    
+                    with tqdm(total=total_count, desc="Processing", unit="item") as pbar:
+                        for future in as_completed(future_to_data):
+                            result = future.result()
+                            new_results[result['data_id']] = result['score']
                             
-                            pbar.write(f"💾 Saving progress... ({total_completed}/{len(all_batch_data)})")
+                            completed_count += 1
+                            total_completed = len(completed_results) + completed_count
                             
-                            # 原子性写入
-                            temp_file = output_csv + '.tmp'
-                            try:
-                                with open(temp_file, 'w', newline='', encoding='utf-8') as f:
-                                    writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
-                                    writer.writeheader()
-                                    writer.writerows(sorted(temp_results, key=lambda x: x['data_id']))
-                                os.replace(temp_file, output_csv)
-                                pbar.write(f"✅ Progress saved successfully")
-                            except Exception as e:
-                                pbar.write(f"⚠️  Warning: Failed to save progress: {e}")
-                                if os.path.exists(temp_file):
-                                    os.remove(temp_file)
+                            # 更新进度条
+                            if result['success']:
+                                pbar.set_postfix({
+                                    'score': f"{result['score']:.3f}", 
+                                    'total': f"{total_completed}/{len(all_batch_data)}"
+                                })
+                            else:
+                                pbar.set_postfix({
+                                    'status': 'FAILED', 
+                                    'total': f"{total_completed}/{len(all_batch_data)}"
+                                })
+                            pbar.update(1)
+                            
+                            # 定期保存进度 - 使用原子性写入
+                            if completed_count % save_interval == 0:
+                                current_results = {**completed_results, **new_results}
+                                temp_results = [{'data_id': data_id, 'score': score} for data_id, score in current_results.items()]
+                                
+                                pbar.write(f"💾 Saving progress... ({total_completed}/{len(all_batch_data)})")
+                                
+                                # 原子性写入
+                                temp_file = output_csv + '.tmp'
+                                try:
+                                    with open(temp_file, 'w', newline='', encoding='utf-8') as f:
+                                        writer = csv.DictWriter(f, fieldnames=['data_id', 'score'])
+                                        writer.writeheader()
+                                        writer.writerows(sorted(temp_results, key=lambda x: x['data_id']))
+                                    os.replace(temp_file, output_csv)
+                                    pbar.write(f"✅ Progress saved successfully")
+                                except Exception as e:
+                                    pbar.write(f"⚠️  Warning: Failed to save progress: {e}")
+                                    if os.path.exists(temp_file):
+                                        os.remove(temp_file)
+            except ConnectionError as e:
+                # 连接错误时立即停止处理
+                print(f"❌ Processing stopped due to connection error: {e}")
+                raise e
             
             return new_results
         
