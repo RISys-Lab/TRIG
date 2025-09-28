@@ -6,6 +6,7 @@ import argparse
 import json
 import time
 from datasets import load_dataset
+from PIL import Image, ImageDraw, ImageFont
 
 
 LANG_DICT = {
@@ -22,17 +23,33 @@ LANG_DICT = {
 }
 
 
+FONT_DICT = {
+    "English": "./font/NotoSans-Regular.ttf",
+    "Chinese": "./font/NotoSansSC-Regular.ttf",
+    "Hindi": "./font/NotoSansDevanagari-Regular.ttf",
+    "Spanish": "./font/NotoSans-Regular.ttf",
+    "Arabic": "./font/NotoSansArabic-Regular.ttf",
+    "French": "./font/NotoSans-Regular.ttf",
+    "Portuguese": "./font/NotoSans-Regular.ttf",
+    "Russian": "./font/NotoSans-Regular.ttf",
+    "Japanese": "./font/SourceHanSansJP-Regular.otf",
+    "Korean": "./font/NotoSansKR-Regular.ttf",
+}
+
+
 def get_args():
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--raw_path",default=r'H:\ProjectsPro\TRIG\dataset\raw_dataset\text-rendering', type=str)
-    parser.add_argument("--raw_path",default=r"H:\ProjectsPro\TRIG\data\dataset_hub", type=str)
-    parser.add_argument("--dataset", default="EasyText", type=str)
+    parser.add_argument("--raw_path",default="/data/dataset_zoo", type=str)
+    parser.add_argument("--raw_dataset", default="EasyText", type=str)
+    parser.add_argument("--save_dataset", default="TRIGv1.5", type=str)
+
 
     return parser.parse_args()
 
 
 def load_data(args):
     dataset = load_dataset("lllrrnn/EasyText")
+    # dataset = load_dataset(args.raw_path, args.raw_dataset)
     
     subset = [
         item for item in dataset['train']
@@ -163,7 +180,9 @@ def process_data(data_list):
             }
             results.append(content)
     
-    with open("trig_multilingual.json", 'w', encoding='utf-8') as file:
+    save_path = os.path.join(args.raw_path, args.save_dataset)
+    os.makedirs(save_path, exist_ok=True)
+    with open(os.path.join(save_path, "trig_multilingual.json"), 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
 
 
@@ -249,14 +268,142 @@ async def async_process_data(data_list):
     for result_list in results_list:
         results.extend(result_list)
 
-    with open("trig_multilingual.json", 'w', encoding='utf-8') as file:
+    save_path = os.path.join(args.raw_path, args.save_dataset)
+    os.makedirs(save_path, exist_ok=True)
+    with open(os.path.join(save_path, "trig_multilingual.json"), 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
 
 
-if __name__ == "__main__":
-    args = get_args()
-    data_list = load_data(args)
+##############################
 
+
+# --- Text Rendering ---
+
+def render_text(text, font_path, output_path, image_size=(512, 128), margin=10):
+    """渲染文本到图片"""
+    # 创建白底图像
+    img = Image.new("RGB", image_size, "white")
+    draw = ImageDraw.Draw(img)
+
+    # 初始字体大小
+    font_size = 60
+    font = ImageFont.truetype(font_path, font_size)
+
+    # 调整字体大小，确保文字能放下
+    bbox = draw.textbbox((0, 0), text, font=font)
+    while (bbox[2] - bbox[0] > image_size[0] - 2*margin) and font_size > 10:
+        font_size -= 2
+        font = ImageFont.truetype(font_path, font_size)
+        bbox = draw.textbbox((0, 0), text, font=font)
+
+    # 居中对齐
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = (image_size[0] - text_width) // 2
+    y = (image_size[1] - text_height) // 2
+
+    # 绘制文字
+    draw.text((x, y), text, font=font, fill="black")
+    img.save(output_path)
+    print(f"保存成功: {output_path}")
+
+
+def render_dimension_prompts(args):
+    """从JSON文件读取数据并渲染dimension_prompt"""
+    
+    print("读取JSON文件...")
+    
+    data_path = os.path.join(args.raw_path, args.save_dataset)
+    with open(os.path.join(data_path, "trig_multilingual.json"), 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    print(f"总共找到 {len(data)} 项数据")
+    
+    # 创建输出目录
+    output_dir = os.path.join(data_path, "condition_image")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 处理所有数据
+    print(f"开始渲染所有 {len(data)} 项数据...")
+    print("=" * 60)
+    
+    success_count = 0
+    
+    for i in tqdm(range(len(data)), desc="渲染文本图片", unit="item"):
+        item = data[i]
+        
+        # 获取基本信息
+        data_id = item.get("data_id", f"item_{i}")
+        dimensions = item.get("dimensions", [])
+        dimension_prompt = item.get("dimension_prompt", [])
+        img_id = item.get("img_id", f"{data_id}.jpg")
+        
+        # 获取语言代码
+        lang_code = dimensions[1] if len(dimensions) > 1 else "en"
+        
+        # 通过LANG_DICT找到对应的语言名称
+        lang_name = None
+        for name, code in LANG_DICT.items():
+            if code == lang_code:
+                lang_name = name
+                break
+        
+        if lang_name is None:
+            print(f"  ❌ 不支持的语言代码: {lang_code}")
+            continue
+        
+        # 获取要渲染的文本（dimension_prompt的第一个元素）
+        text_to_render = dimension_prompt[0] if dimension_prompt and len(dimension_prompt) > 0 else "No text"
+        
+        print(f"\n处理第 {i+1} 项:")
+        print(f"  Data ID: {data_id}")
+        print(f"  语言: {lang_name} ({lang_code})")
+        print(f"  文本: {text_to_render}")
+        print(f"  IMG ID: {img_id}")
+        
+        try:
+            # 获取字体路径
+            font_path = FONT_DICT.get(lang_name, FONT_DICT["English"])
+            
+            # 检查字体文件是否存在
+            if not os.path.exists(font_path):
+                print(f"  ❌ 字体文件不存在: {font_path}")
+                continue
+            
+            # 为每个语言创建单独的子目录
+            lang_output_dir = os.path.join(output_dir, lang_code)
+            os.makedirs(lang_output_dir, exist_ok=True)
+            
+            # 使用img_id中的文件名，但改为.png扩展名
+            img_filename = os.path.splitext(img_id)[0] + ".png"
+            output_path = os.path.join(lang_output_dir, img_filename)
+            
+            # 渲染文本
+            render_text(text_to_render, font_path, output_path)
+            print(f"  ✅ 渲染成功: {output_path}")
+            success_count += 1
+            
+        except Exception as e:
+            print(f"  ❌ 渲染失败: {str(e)}")
+    
+    print("\n" + "=" * 60)
+    print(f"渲染完成！成功: {success_count}/{len(data)}")
+    print(f"图片保存在: {output_dir}")
+    print("目录结构:")
+    for lang_code in LANG_DICT.values():
+        lang_dir = os.path.join(output_dir, lang_code)
+        if os.path.exists(lang_dir):
+            file_count = len([f for f in os.listdir(lang_dir) if f.endswith('.png')])
+            print(f"  {lang_code}/: {file_count} 个文件")
+    
+    return success_count
+
+
+
+if __name__ == "__main__":    
+    args = get_args()
+    
+    data_list = load_data(args)
     async_mode = True
     if async_mode:
         print("Running in **async high-concurrency** mode with asyncio.")
@@ -264,4 +411,9 @@ if __name__ == "__main__":
     else:
         print("Running in **sync single-threaded** mode.")
         process_data(data_list)
+    
+    # 主程序执行完成后，执行文本渲染
+    print("\n" + "=" * 60)
+    print("开始执行文本渲染...")
+    render_dimension_prompts(args)
     
