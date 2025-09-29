@@ -43,10 +43,8 @@ def send_request(prompt, image_b64, model="gpt-4o-mini", endpoint="http://localh
     completion = client.chat.completions.create(
         model=model,
         messages=messages,
-        logprobs=True,
-        max_tokens=1,
+        max_tokens=500,
         temperature=0.0,
-        top_logprobs=5,
     )
     return completion.choices[0].message.content
 
@@ -62,12 +60,14 @@ def main(json_file, image_dir, model_name, output_csv="results.csv", model="/leo
     
     image_dir = Path(image_dir)
     
-    for data in data_list:
+    # 筛选以R-B开头的数据
+    rb_data_list = [data for data in data_list if data["data_id"].startswith("R-B")]
+    total_items = len(rb_data_list)
+    print(f"📊 总共找到 {total_items} 个以R-B开头的数据项")
+    
+    for idx, data in enumerate(rb_data_list, 1):
         data_id = data["data_id"]
-        
-        # 只处理以R-B开头的data_id
-        if not data_id.startswith("R-B"):
-            continue
+        print(f"\n🔄 [{idx}/{total_items}] 正在处理: {data_id}")
             
         prompt = data["prompt"]
         # 从R-B格式的data_id中提取语言代码 (例如: R-B_zh_001 -> zh)
@@ -88,8 +88,8 @@ def main(json_file, image_dir, model_name, output_csv="results.csv", model="/leo
                 break
         
         if img_path is None:
-            print(f"❌ Image not found for data_id: {data_id}")
-            results.append({"data_id": data_id, "score": 0.0})
+            print(f"❌ 图片未找到: {data_id}")
+            results.append({"data_id": data_id, "race": "No Image", "gender": "No Image", "age": "No Image"})
             continue
         
         # 读取图片并编码
@@ -98,11 +98,15 @@ def main(json_file, image_dir, model_name, output_csv="results.csv", model="/leo
 
         try:
             answer = send_request(prompt, image_b64, model=model, endpoint=endpoint)
+            print(f"📝 API返回的JSON: {answer}")
+            
             # 解析答案（GPT返回的应该是JSON字符串）
             try:
                 people = json.loads(answer)
-            except Exception:
-                print(f"⚠️ JSON parse error for {data_id}, raw: {answer}")
+                print(f"✅ 成功解析JSON，检测到 {len(people)} 个人")
+            except Exception as e:
+                print(f"⚠️ JSON解析错误: {e}")
+                print(f"原始返回: {answer}")
                 people = []
 
             # 保存逐张结果
@@ -115,8 +119,12 @@ def main(json_file, image_dir, model_name, output_csv="results.csv", model="/leo
                 })
 
         except Exception as e:
-            print(f"❌ Error processing {data_id}: {e}")
+            print(f"❌ 处理错误 {data_id}: {e}")
             results.append({"data_id": data_id, "race": "Error", "gender": "Error", "age": "Error"})
+        
+        # 显示进度
+        progress_percent = (idx / total_items) * 100
+        print(f"📈 进度: {progress_percent:.1f}% ({idx}/{total_items})")
 
         # ===== 保存逐张结果 =====
         detailed_csv = f"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/result/bias/{model_name}.csv"
