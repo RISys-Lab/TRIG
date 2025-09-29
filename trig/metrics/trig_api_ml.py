@@ -91,6 +91,7 @@ class TRIGAPIMetric(BaseMetric):
                 logprobs=True,
                 temperature=self.temperature,
                 top_logprobs=self.top_logprobs,
+                max_tokens=1
             )
 
             # print(completion.choices[0].message.content)
@@ -306,14 +307,22 @@ if __name__ == "__main__":
     
     # 检查是否有已完成的结果（断点续传）
     completed_results = {}
+    zero_score_count = 0
     if os.path.exists(output_csv):
         print(f"📂 Found existing results file: {output_csv}")
         try:
             with open(output_csv, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    completed_results[row['data_id']] = float(row['score'])
-            print(f"✅ Loaded {len(completed_results)} existing results")
+                    score = float(row['score'])
+                    # 只保留分数大于0的结果，分数为0的需要重跑
+                    if score > 0.0:
+                        completed_results[row['data_id']] = score
+                    else:
+                        zero_score_count += 1
+            print(f"✅ Loaded {len(completed_results)} valid existing results")
+            if zero_score_count > 0:
+                print(f"🔄 Found {zero_score_count} items with score 0.0 that will be re-processed")
         except Exception as e:
             print(f"⚠️  Warning: Could not load existing results: {e}")
     
@@ -361,7 +370,7 @@ if __name__ == "__main__":
     if missing_count > 0:
         print(f"   ⚠️  Missing files: {missing_count}")
     
-    # 过滤出未完成的数据
+    # 过滤出未完成的数据（包括分数为0的项目）
     remaining_data = [data for data in all_batch_data if data['data_id'] not in completed_results]
     
     print(f"📊 Progress: {len(completed_results)}/{len(all_batch_data)} already completed")
