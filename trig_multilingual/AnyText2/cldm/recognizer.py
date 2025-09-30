@@ -266,7 +266,8 @@ def main():
     predictor = create_predictor(rec_model_dir).eval()
     args = edict()
     args.rec_image_shape = "3, 48, 320"
-    args.rec_char_dict_path = './ocr_weights/ppocr_keys_v1.txt'
+    # 修复OCR字典文件路径
+    args.rec_char_dict_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ocr_recog', 'ppocr_keys_v1.txt')
     args.rec_batch_num = 6
     args.use_fp16 = False
     text_recognizer = TextRecognizer(args, predictor)

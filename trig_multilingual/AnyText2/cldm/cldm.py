@@ -3,9 +3,10 @@ import torch
 import torch as th
 import torch.nn as nn
 import copy
+import os
 from easydict import EasyDict as edict
 
-from ..ldm.modules.diffusionmodules.util import (
+from ldm.modules.diffusionmodules.util import (
     conv_nd,
     linear,
     zero_module,
@@ -14,13 +15,13 @@ from ..ldm.modules.diffusionmodules.util import (
 
 from einops import rearrange, repeat
 from torchvision.utils import make_grid
-from ..ldm.modules.attention import SpatialTransformer
-from ..ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepEmbedSequential, ResBlock, Downsample, AttentionBlock
-from ..ldm.models.diffusion.ddpm import LatentDiffusion, get_print_grad_hook, print_grad
-from ..ldm.util import log_txt_as_img, exists, instantiate_from_config
+from ldm.modules.attention import SpatialTransformer
+from ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepEmbedSequential, ResBlock, Downsample, AttentionBlock
+from ldm.models.diffusion.ddpm import LatentDiffusion, get_print_grad_hook, print_grad
+from ldm.util import log_txt_as_img, exists, instantiate_from_config
 # from ldm.models.diffusion.ddim import DDIMSampler
 from .ddim_hacked import DDIMSampler
-from ..ldm.modules.distributions.distributions import DiagonalGaussianDistribution
+from ldm.modules.distributions.distributions import DiagonalGaussianDistribution
 from .recognizer import TextRecognizer, create_predictor
 from omegaconf.listconfig import ListConfig
 import cv2
@@ -422,7 +423,8 @@ class ControlLDM(LatentDiffusion):
                 args = edict()
                 args.rec_image_shape = "3, 48, 320"
                 args.rec_batch_num = 6
-                args.rec_char_dict_path = './ocr_recog/ppocr_keys_v1.txt'
+                # 修复OCR字典文件路径
+                args.rec_char_dict_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ocr_recog', 'ppocr_keys_v1.txt')
                 args.use_fp16 = self.use_fp16
                 self.cn_recognizer = TextRecognizer(args, self.text_predictor)
                 for param in self.text_predictor.parameters():

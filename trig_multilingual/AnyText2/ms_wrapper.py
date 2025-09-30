@@ -313,9 +313,13 @@ class AnyText2Model(TorchModel):
             print(self.trans_pipe(input='初始化翻译器')['translation'])
         else:
             self.trans_pipe = None
-        font_path = kwargs.get('font_path', 'font/Arial_Unicode.ttf')
+        # 修复字体文件路径
+        default_font_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'font', 'Arial_Unicode.ttf')
+        font_path = kwargs.get('font_path', default_font_path)
         self.font = ImageFont.truetype(font_path, size=60)
-        cfg_path = kwargs.get('cfg_path', 'models_yaml/anytext2_sd15.yaml')
+        # 修复配置文件路径，使其相对于模块目录
+        default_cfg_path = os.path.join(os.path.dirname(__file__), 'models_yaml', 'anytext2_sd15.yaml')
+        cfg_path = kwargs.get('cfg_path', default_cfg_path)
         self.ckpt_path = kwargs.get('model_path', os.path.join(self.model_dir, 'anytext_v2.0.ckpt'))
         clip_path = os.path.join(self.model_dir, 'clip-vit-large-patch14')
         self.model = create_model(cfg_path, cond_stage_path=clip_path, use_fp16=self.use_fp16)

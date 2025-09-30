@@ -22,7 +22,14 @@ from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianD
 from ldm.models.autoencoder import IdentityFirstStage, AutoencoderKL
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
-from ...cldm.recognizer import crop_image
+# 修复导入路径 - 使用绝对导入
+import sys
+import os
+# 添加AnyText2目录到路径以访问cldm模块
+anytext2_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+if anytext2_dir not in sys.path:
+    sys.path.insert(0, anytext2_dir)
+from cldm.recognizer import crop_image
 import cv2
 
 
