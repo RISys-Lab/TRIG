@@ -2,8 +2,8 @@ from huggingface_hub import HfApi
 
 api = HfApi()
 api.upload_file(
-    path_in_repo="output/t2i_ml/mulan.zip", 
-    path_or_fileobj="/home/muzammal/Projects/TRIG/data/output/t2i_ml/mulan.zip",  
+    path_in_repo="output/tr_ml/nanobanana.zip", 
+    path_or_fileobj="/home/muzammal/Projects/TRIG/data/output/tr_ml/nanobanana.zip",  
     repo_id="TRIG-bench/TRIG_multilingual_output_images", 
     repo_type="dataset" 
 )
