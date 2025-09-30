@@ -152,6 +152,27 @@ def draw_glyph2(font, text, polygon, color, vertAng=10, scale=1, width=512, heig
         box = cv2.boxPoints(rect)
         box = np.int0(box)
         w, h = rect[1]
+        
+        # 智能修复无效的多边形尺寸
+        if w <= 0 or h <= 0:
+            print(f"Warning: Invalid polygon dimensions w={w}, h={h} for text '{text}', attempting to fix...")
+            
+            # 尝试修复：如果宽度或高度为0，设置一个合理的最小值
+            min_font_size = 12  # 最小字体大小对应的区域
+            if w <= 0:
+                w = max(len(text) * min_font_size, min_font_size * 2)  # 根据文字长度估算宽度
+                print(f"  Fixed width to: {w}")
+            if h <= 0:
+                h = min_font_size * 1.5  # 设置合理的高度
+                print(f"  Fixed height to: {h}")
+            
+            # 重新构建修复后的矩形
+            center = rect[0]  # 保持中心位置不变
+            angle = rect[2]   # 保持角度不变
+            rect = (center, (w, h), angle)
+            box = cv2.boxPoints(rect)
+            box = np.int0(box)
+            
         angle = rect[2]
 
         if angle < -45:
@@ -164,6 +185,29 @@ def draw_glyph2(font, text, polygon, color, vertAng=10, scale=1, width=512, heig
         if (abs(angle) % 90 < vertAng or abs(90 - abs(angle) % 90) % 90 < vertAng):
             _w = max(box[:, 0]) - min(box[:, 0])
             _h = max(box[:, 1]) - min(box[:, 1])
+            
+            # 智能修复计算出的无效尺寸
+            if _w <= 0 or _h <= 0:
+                print(f"Warning: Invalid calculated dimensions _w={_w}, _h={_h} for text '{text}', fixing...")
+                min_dim = 12
+                if _w <= 0:
+                    _w = max(len(text) * min_dim, min_dim * 2)
+                    print(f"  Fixed _w to: {_w}")
+                if _h <= 0:
+                    _h = min_dim * 1.5
+                    print(f"  Fixed _h to: {_h}")
+                
+                # 重新计算box点
+                center = rect[0]
+                half_w = _w / 2
+                half_h = _h / 2
+                box = np.array([
+                    [center[0] - half_w, center[1] - half_h],
+                    [center[0] + half_w, center[1] - half_h],
+                    [center[0] + half_w, center[1] + half_h],
+                    [center[0] - half_w, center[1] + half_h]
+                ], dtype=np.int32)
+                
             if _h >= _w:
                 vert = True
                 angle = 0
@@ -171,8 +215,8 @@ def draw_glyph2(font, text, polygon, color, vertAng=10, scale=1, width=512, heig
         img = initialize_img(width, height, scale)
         image4ratio = Image.new("RGB", img.size, "white")
         draw = ImageDraw.Draw(image4ratio)
-        min_dim = min(w, h)
-        max_dim = max(w, h)
+        min_dim = max(1, min(w, h))  # 确保最小维度至少为1
+        max_dim = max(1, max(w, h))  # 确保最大维度至少为1
 
         # Binary search for optimal font size
         def adjust_font_size(min_size, max_size, text):
@@ -188,7 +232,8 @@ def draw_glyph2(font, text, polygon, color, vertAng=10, scale=1, width=512, heig
                     max_size = mid_size
             return max_size - 1
 
-        optimal_font_size = adjust_font_size(1, min_dim, text)
+        optimal_font_size = adjust_font_size(1, max(1, int(min_dim)), text)
+        optimal_font_size = max(1, optimal_font_size)  # 确保字体大小至少为1
         new_font = font.font_variant(size=int(optimal_font_size))
 
         extra_space = 0
@@ -199,7 +244,8 @@ def draw_glyph2(font, text, polygon, color, vertAng=10, scale=1, width=512, heig
                                    draw.textbbox((0, 0), text=char, font=new_font)[1]
                                    for char in text)
                 if total_height < max_dim and len(text) > 1:
-                    extra_space = (max_dim - total_height) // (len(text) - 1)
+                    # 防止除零错误
+                    extra_space = (max_dim - total_height) // max(1, (len(text) - 1))
             else:
                 # Handle horizontal text space addition
                 for i in range(1, 100):
@@ -237,7 +283,18 @@ def draw_glyph2(font, text, polygon, color, vertAng=10, scale=1, width=512, heig
         return prepare_image(img)
 
     except Exception as e:
+        import traceback
         print(f"An error occurred in draw_glyph2: {e}")
+        print(f"  Text: '{text}', Polygon: {polygon}")
+        print(f"  Polygon shape: {np.array(polygon).shape if polygon is not None else 'None'}")
+        if polygon is not None:
+            try:
+                rect = cv2.minAreaRect(np.array(polygon))
+                print(f"  Rect dimensions: {rect[1] if len(rect) > 1 else 'Invalid'}")
+            except:
+                print(f"  Could not calculate rect dimensions")
+        print("  Full traceback:")
+        print(traceback.format_exc())
         img = initialize_img(width, height, scale)
         return prepare_image(img)
 
