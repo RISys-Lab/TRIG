@@ -48,11 +48,29 @@ def process_prompt(prompt: str, dimension_prompt: list) -> str:
     # Get the text from dimension_prompt[0]
     text_to_replace = dimension_prompt[0]
     
-    # Replace <sks1> with the text from dimension_prompt[0], wrapped in quotes
-    processed_prompt = prompt.replace("<sks1>", f'"{text_to_replace}"')
+    # Count how many <sks1> tags are in the prompt
+    sks1_count = prompt.count('<sks1>')
+    print(f"Found {sks1_count} <sks1> tags in prompt")
+    
+    if sks1_count > 1:
+        print("Warning: Multiple <sks1> tags found. Processing only the first one.")
+        print(f"Original prompt: {prompt}")
+        
+        # Replace only the first <sks1> and remove the rest
+        parts = prompt.split('<sks1>', 1)  # Split only on first occurrence
+        if len(parts) == 2:
+            processed_prompt = parts[0] + f'"{text_to_replace}"' + parts[1].replace('<sks1>', '')
+            print("Applied: Replace only first <sks1>, remove others")
+        else:
+            processed_prompt = prompt.replace("<sks1>", f'"{text_to_replace}"')
+    else:
+        # Replace the single <sks1> with the text from dimension_prompt[0], wrapped in quotes
+        processed_prompt = prompt.replace("<sks1>", f'"{text_to_replace}"')
     
     # Replace single quotes with double quotes
     processed_prompt = processed_prompt.replace("'", '"')
+    
+    print(f"Processed prompt: {processed_prompt}")
     
     return processed_prompt
 
@@ -138,6 +156,7 @@ def main():
             print(f"Skipping {data_id}")
             skipped_count += 1
             continue
+        
         
         print(f"Processing {data_id} (language: {language})...")
         print(f"Original prompt: {prompt[:100]}...")
