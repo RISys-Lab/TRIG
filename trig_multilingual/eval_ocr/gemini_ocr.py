@@ -78,7 +78,7 @@ def send_gemini_request(messages, max_retries=5, delay=2):
         try:
             print(f"Sending OCR request to Gemini (attempt {attempt + 1})...")
             # Note: You should set your actual API key here
-            api_key = 'AIzaSyA7_SqnQBqjN1Z3vJersGd6mhYMmt1EiuU'  # Replace with actual API key
+            api_key = ''  # Replace with actual API key
             client = OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
             
             response = client.chat.completions.create(
