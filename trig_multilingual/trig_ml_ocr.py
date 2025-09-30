@@ -19,6 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import the original OCR evaluation utilities
 from eval_ocr.recognizer import TextRecognizer, crop_image
+from eval_ocr.gemini_ocr import GeminiOCRRecognizer, crop_image_for_gemini
+
+# Fixed coordinate size for JSON files
+JSON_COORD_SIZE = (1024, 1024)
 
 def get_ld(ls1, ls2):
     """Calculate normalized edit distance"""
@@ -150,7 +154,7 @@ def load_trig_data(json_path):
     
     return grouped_data
 
-def setup_ocr_recognizer(language='en'):
+def setup_ocr_recognizer(language='en', use_gemini=False):
     """Setup OCR recognizer for the given language"""
     # Language-specific dictionary mapping
     language_dict_mapping = {
@@ -189,18 +193,24 @@ def setup_ocr_recognizer(language='en'):
     # Setup modelscope OCR pipeline
     predictor = pipeline(Tasks.ocr_recognition, model='/data/model_zoo/cv_convnextTiny_ocr-recognition-general_damo')
     
-    # Setup text recognizer
+    # Setup text recognizer based on mode
     rec_image_shape = "3, 48, 320"
-    args = edict()
-    args.rec_image_shape = rec_image_shape
-    args.rec_char_dict_path = rec_char_dict_path
-    args.rec_batch_num = 1
-    args.use_fp16 = False
-    text_recognizer = TextRecognizer(args, None)
     
-    return predictor, text_recognizer, rec_image_shape
+    if use_gemini:
+        # Use Gemini API for OCR
+        gemini_recognizer = GeminiOCRRecognizer()
+        return None, gemini_recognizer, rec_image_shape
+    else:
+        # Use local models
+        args = edict()
+        args.rec_image_shape = rec_image_shape
+        args.rec_char_dict_path = rec_char_dict_path
+        args.rec_batch_num = 1
+        args.use_fp16 = False
+        text_recognizer = TextRecognizer(args, None)
+        return predictor, text_recognizer, rec_image_shape
 
-def evaluate_language(model_path, language, lang_data, predictor, text_recognizer, rec_image_shape, json_coord_size=(1024, 1024)):
+def evaluate_language(model_path, language, lang_data, predictor, text_recognizer, rec_image_shape, use_gemini=False, use_position=False):
     """Evaluate a specific language"""
     print(f"\n📊 Evaluating language: {language}")
     
@@ -240,13 +250,15 @@ def evaluate_language(model_path, language, lang_data, predictor, text_recognize
         positions = item['positions']
         
         # Check image resolution and scale coordinates if needed
-        original_size = tuple(json_coord_size)  # JSON coordinates original resolution
+        original_size = JSON_COORD_SIZE  # JSON coordinates original resolution
         current_size = (H, W)
         
         # Process each text region in the image
         pred_texts = []
+        scaled_polygons = []  # Store scaled polygons for Gemini OCR
         
-        if positions and len(positions) > 0:
+        if use_position and positions and len(positions) > 0:
+            # Use position information to crop specific text regions
             for pos_info in positions:
                 if len(pos_info) > 0 and len(pos_info[0]) > 0:
                     # Extract polygon coordinates
@@ -265,22 +277,48 @@ def evaluate_language(model_path, language, lang_data, predictor, text_recognize
                         # Crop and recognize text
                         pred_text_img = crop_image(img, np_pos)
                         pred_texts.append(pred_text_img)
+                        scaled_polygons.append(scaled_polygon)
+        else:
+            # No position information - use the whole image
+            pred_texts.append(img)
+            scaled_polygons.append(None)
         
         if len(pred_texts) > 0:
-            # Pre-process for OCR
-            pred_texts_processed = pre_process(pred_texts, rec_image_shape)
-            
-            # Run OCR recognition
-            all_predictions = []
-            for pt in pred_texts_processed:
-                rst = predictor(pt)
-                if 'text' in rst and len(rst['text']) > 0:
-                    all_predictions.append(rst['text'][0])
-                else:
-                    all_predictions.append("")
-            
-            # Combine all predicted texts (join with space)
-            pred_text = ' '.join(all_predictions).strip()
+            if use_gemini:
+                # Use Gemini OCR for recognition
+                all_predictions = []
+                for i, pred_text_img in enumerate(pred_texts):
+                    # Convert tensor to OpenCV format for Gemini
+                    scaled_polygon = scaled_polygons[i] if i < len(scaled_polygons) else None
+                    cropped_cv_img = crop_image_for_gemini(pred_text_img, None)
+                    
+                    # Use Gemini API with or without position information
+                    if use_position and scaled_polygon is not None:
+                        position_info = {"polygon": scaled_polygon, "image_size": (H, W)}
+                    else:
+                        position_info = None
+                    
+                    recognized_text = text_recognizer.recognize_text(cropped_cv_img, position_info)
+                    all_predictions.append(recognized_text)
+                
+                # Combine all predicted texts (join with space)
+                pred_text = ' '.join(all_predictions).strip()
+            else:
+                # Use local models for OCR
+                # Pre-process for OCR
+                pred_texts_processed = pre_process(pred_texts, rec_image_shape)
+                
+                # Run OCR recognition
+                all_predictions = []
+                for pt in pred_texts_processed:
+                    rst = predictor(pt)
+                    if 'text' in rst and len(rst['text']) > 0:
+                        all_predictions.append(rst['text'][0])
+                    else:
+                        all_predictions.append("")
+                
+                # Combine all predicted texts (join with space)
+                pred_text = ' '.join(all_predictions).strip()
         else:
             pred_text = ""
         
@@ -289,19 +327,19 @@ def evaluate_language(model_path, language, lang_data, predictor, text_recognize
         sen_acc.append(int(pred_text == gt_text))
         
         # Normalized edit distance
-        if text_recognizer:
+        if text_recognizer and hasattr(text_recognizer, 'char2id'):
+            # Use character-to-ID mapping for local models
             gt_order = [text_recognizer.char2id.get(m, len(text_recognizer.chars) - 1) for m in gt_text]
             pred_order = [text_recognizer.char2id.get(m, len(text_recognizer.chars) - 1) for m in pred_text]
             edit_dist.append(get_ld(pred_order, gt_order))
         else:
-            # Fallback to character-level edit distance if no recognizer
+            # Fallback to character-level edit distance for Gemini OCR or no recognizer
             edit_dist.append(get_ld(list(gt_text), list(pred_text)))
         
         processed_count += 1
         
-        # Debug output for first few samples
-        if processed_count <= 5:
-            print(f'  Sample {data_id}: pred="{pred_text}" | gt="{gt_text}" | acc={sen_acc[-1]} | ned={edit_dist[-1]:.4f}')
+        # Debug output for all samples
+        print(f'  Sample {data_id}: pred="{pred_text}" | gt="{gt_text}" | acc={sen_acc[-1]} | ned={edit_dist[-1]:.4f}')
     
     # Calculate metrics
     if len(sen_acc) > 0:
@@ -324,7 +362,7 @@ def evaluate_language(model_path, language, lang_data, predictor, text_recognize
         'missing_samples': len(missing_images)
     }
 
-def evaluate_model(model_path, trig_data, json_coord_size=(1024, 1024)):
+def evaluate_model(model_path, trig_data, ocr_mode, use_position=False):
     """Evaluate a specific model"""
     print(f"\n🔍 Evaluating model: {model_path}")
     
@@ -353,10 +391,11 @@ def evaluate_model(model_path, trig_data, json_coord_size=(1024, 1024)):
             continue
         
         # Setup language-specific OCR
-        predictor, text_recognizer, rec_image_shape = setup_ocr_recognizer(language)
+        use_gemini = (ocr_mode == 'gemini')
+        predictor, text_recognizer, rec_image_shape = setup_ocr_recognizer(language, use_gemini)
         
         # Evaluate this language
-        lang_results = evaluate_language(model_path, language, lang_data, predictor, text_recognizer, rec_image_shape, json_coord_size)
+        lang_results = evaluate_language(model_path, language, lang_data, predictor, text_recognizer, rec_image_shape, use_gemini, use_position)
         
         results['by_language'][language] = lang_results
         
@@ -400,9 +439,11 @@ def parse_args():
     parser.add_argument('--languages', type=str, nargs='+',
                         default=None,
                         help='Specific languages to evaluate (default: all)')
-    parser.add_argument('--json_coord_size', type=int, nargs=2,
-                        default=[1024, 1024],
-                        help='Original resolution of coordinates in JSON file (height width)')
+    parser.add_argument('--ocr_mode', type=str, choices=['local', 'gemini'], 
+                        default='local',
+                        help='OCR mode: local (use local models) or gemini (use Gemini API)')
+    parser.add_argument('--use_position', action='store_true',
+                        help='Use position information for text recognition (default: False)')
     return parser.parse_args()
 
 def main():
@@ -411,6 +452,8 @@ def main():
     print("🚀 Starting TRIGv1.5 Text Recognition Evaluation")
     print(f"📂 Model path: {args.model_path}")
     print(f"📄 TRIG JSON: {args.trig_json}")
+    print(f"🔧 OCR Mode: {'Gemini API' if args.ocr_mode == 'gemini' else 'Local Models'}")
+    print(f"📍 Position Info: {'Enabled' if args.use_position else 'Disabled'}")
     
     # Load TRIGv1.5 dataset
     trig_data = load_trig_data(args.trig_json)
@@ -425,10 +468,18 @@ def main():
         print(f"🔍 Evaluating only specified languages: {list(trig_data.keys())}")
     
     # Evaluate the model
-    results = evaluate_model(args.model_path, trig_data, args.json_coord_size)
+    results = evaluate_model(args.model_path, trig_data, args.ocr_mode, args.use_position)
     
-    # Save results
-    output_path = os.path.join(args.model_path, args.output_file)
+    # Save results with OCR mode in filename
+    # Extract base filename and extension
+    base_name, ext = os.path.splitext(args.output_file)
+    if not ext:
+        ext = '.json'  # Default extension if none provided
+    
+    # Create filename with OCR mode
+    output_filename = f"{base_name}_{args.ocr_mode}{ext}"
+    output_path = os.path.join(args.model_path, output_filename)
+    
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     
