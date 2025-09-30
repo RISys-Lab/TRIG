@@ -234,12 +234,12 @@ def main(json_file, image_dir, model_name, batch_size=50, max_concurrent=5, mode
 
 if __name__ == "__main__":
     # 示例：读取JSON文件并对图片打分
-    model_name = "flux"
-    main(
-        json_file="/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json", 
-        image_dir=f"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/{model_name}", 
-        model_name=model_name,
-        batch_size=50,      # 每批处理50个图片
-        max_concurrent=5    # 最多同时5个并发请求
-    )
+    for model_name in ["flux", "janus", "mulan", "PEA", "pixart_sigma", "qwen_image", "sana", "sd35", "sdxl", "X2I"]:
+        main(
+            json_file="/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json", 
+            image_dir=f"/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/t2i_ml/{model_name}", 
+            model_name=model_name,
+            batch_size=50,      # 每批处理50个图片
+            max_concurrent=5    # 最多同时5个并发请求
+        )
 
