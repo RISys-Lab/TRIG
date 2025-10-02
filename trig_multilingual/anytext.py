@@ -19,7 +19,7 @@ from modelscope.pipelines import pipeline
 def parse_args():
     parser = argparse.ArgumentParser(description='AnyText image generation for TRIGv1.5')
     parser.add_argument('--json_path', type=str, 
-                        default="/data/dataset_zoo/TRIGv1.5/trig_multilingual.json",
+                        default="/data/dataset_zoo/TRIGv1.5/trig_multilingual_tr.json",
                         help='Path to TRIGv1.5 JSON file')
     parser.add_argument('--coarse_mask_path', type=str,
                         default="/data/dataset_zoo/TRIGv1.5/coarse_mask",

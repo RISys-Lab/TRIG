@@ -251,7 +251,7 @@ def main():
     parser = argparse.ArgumentParser(description='AnyText2 JSON Batch Processing')
     
     # 必需参数
-    parser.add_argument('--json_path', default='/data/dataset_zoo/TRIGv1.5/trig_multilingual.json', help='Path to JSON file for batch processing')
+    parser.add_argument('--json_path', default='/data/dataset_zoo/TRIGv1.5/trig_multilingual_tr.json', help='Path to JSON file for batch processing')
     
     # 可选参数
     parser.add_argument('--width', type=int, default=512, help='Image width')

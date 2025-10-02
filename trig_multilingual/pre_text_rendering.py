@@ -171,7 +171,7 @@ def process_data(data_list):
     
     save_path = os.path.join(args.raw_path, args.save_dataset)
     os.makedirs(save_path, exist_ok=True)
-    with open(os.path.join(save_path, "trig_multilingual.json"), 'w', encoding='utf-8') as file:
+    with open(os.path.join(save_path, "trig_multilingual_tr.json"), 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
 
 
@@ -261,7 +261,7 @@ async def async_process_data(data_list):
 
     save_path = os.path.join(args.raw_path, args.save_dataset)
     os.makedirs(save_path, exist_ok=True)
-    with open(os.path.join(save_path, "trig_multilingual.json"), 'w', encoding='utf-8') as file:
+    with open(os.path.join(save_path, "trig_multilingual_tr.json"), 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
 
 
@@ -412,7 +412,7 @@ def render_dimension_prompts(args):
     print("读取JSON文件...")
     
     data_path = os.path.join(args.raw_path, args.save_dataset)
-    with open(os.path.join(data_path, "trig_multilingual.json"), 'r', encoding='utf-8') as f:
+    with open(os.path.join(data_path, "trig_multilingual_tr.json"), 'r', encoding='utf-8') as f:
         data = json.load(f)
     
     print(f"总共找到 {len(data)} 项数据")
@@ -505,7 +505,7 @@ def render_dimension_prompts(args):
     
     # 保存更新后的数据
     print("\n保存更新后的数据...")
-    with open(os.path.join(data_path, "trig_multilingual.json"), 'w', encoding='utf-8') as f:
+    with open(os.path.join(data_path, "trig_multilingual_tr.json"), 'w', encoding='utf-8') as f:
         json.dump(updated_data, f, ensure_ascii=False, indent=4)
     print("✅ 数据已保存")
     
@@ -638,7 +638,7 @@ def create_coarse_mask(args):
     print("读取JSON文件...")
     
     data_path = os.path.join(args.raw_path, args.save_dataset)
-    with open(os.path.join(data_path, "trig_multilingual.json"), 'r', encoding='utf-8') as f:
+    with open(os.path.join(data_path, "trig_multilingual_tr.json"), 'r', encoding='utf-8') as f:
         data = json.load(f)
     
     print(f"总共找到 {len(data)} 项数据")

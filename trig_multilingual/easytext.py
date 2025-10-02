@@ -30,7 +30,7 @@ print("Pipeline loaded successfully!")
 def parse_args():
     parser = argparse.ArgumentParser(description='FLUX image generation with LoRA for TRIGv1.5')
     parser.add_argument('--json_path', type=str, 
-                        default="/data/dataset_zoo/TRIGv1.5/trig_multilingual.json",
+                        default="/data/dataset_zoo/TRIGv1.5/trig_multilingual_tr.json",
                         help='Path to TRIGv1.5 JSON file')
     parser.add_argument('--condition_image_path', type=str,
                         default="/data/dataset_zoo/TRIGv1.5/condition_image",
