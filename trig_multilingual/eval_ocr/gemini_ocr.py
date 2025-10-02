@@ -80,7 +80,8 @@ def send_gemini_request(messages, max_retries=5, delay=2):
             # Note: You should set your actual API key here
             api_key = ''  # Replace with actual API key
             client = OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
-            
+            # client = OpenAI(api_key=api_key, base_url="https://api.bltcy.ai/v1")
+
             response = client.chat.completions.create(
                 model="gemini-2.5-flash",
                 messages=messages
