@@ -198,7 +198,7 @@ def save_generated_images(img_list, save_folder, img_id):
 
 
 def process_json_data(json_path, base_mask_path="/data/dataset_zoo/TRIGv1.5/coarse_mask", 
-                     base_save_path="/data/experiments/TRIGv1.5/AnyText2"):
+                     base_save_path="/data/experiments/TRIGv1.5/output/tr_ml/AnyText2"):
     """
     处理JSON数据文件
     

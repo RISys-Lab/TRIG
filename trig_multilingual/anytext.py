@@ -25,7 +25,7 @@ def parse_args():
                         default="/data/dataset_zoo/TRIGv1.5/coarse_mask",
                         help='Path to coarse mask images directory')
     parser.add_argument('--output_path', type=str,
-                        default="/data/experiments/TRIGv1.5/AnyText",
+                        default="/data/experiments/TRIGv1.5/output/tr_ml/AnyText",
                         help='Output image path')
     parser.add_argument('--seed', type=int, default=66273235)
     parser.add_argument('--ddim_steps', type=int, default=20,

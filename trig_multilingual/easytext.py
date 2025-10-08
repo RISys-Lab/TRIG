@@ -36,7 +36,7 @@ def parse_args():
                         default="/data/dataset_zoo/TRIGv1.5/condition_image",
                         help='Path to condition images directory')
     parser.add_argument('--output_path', type=str,
-                        default="/data/experiments/TRIGv1.5/EasyText",
+                        default="/data/experiments/TRIGv1.5/output/tr_ml/EasyText",
                         help='Output image path')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--height', type=int, default=1024)
