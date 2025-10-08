@@ -952,7 +952,7 @@ def evaluate_model_skip_ocr(results_file):
 def parse_args():
     parser = argparse.ArgumentParser(description='Evaluate text recognition models on TRIGv1.5 dataset')
     parser.add_argument('--model_path', type=str, 
-                        default='/data/experiments/TRIGv1.5/EasyText',
+                        default='/data/experiments/TRIGv1.5/output/tr_ml/EasyText',
                         help='Path to model output directory')
     parser.add_argument('--trig_json', type=str,
                         default='/data/dataset_zoo/TRIGv1.5/trig_multilingual_tr.json',
