@@ -1,28 +1,28 @@
 from huggingface_hub import HfApi
 
-api = HfApi()
-api.upload_file(
-    path_in_repo="output/tr_ml/nanobanana.zip", 
-    path_or_fileobj="/home/muzammal/Projects/TRIG/data/output/tr_ml/nanobanana.zip",  
-    repo_id="TRIG-bench/TRIG_multilingual_output_images", 
-    repo_type="dataset" 
-)
+# api = HfApi()
+# api.upload_file(
+#     path_in_repo="output/tr_ml/nanobanana.zip", 
+#     path_or_fileobj="/home/muzammal/Projects/TRIG/data/output/tr_ml/nanobanana.zip",  
+#     repo_id="TRIG-bench/TRIG_multilingual_output_images", 
+#     repo_type="dataset" 
+# )
 
-# from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download
 
 # # 设定仓库ID
-# repo_id = "TRIG-bench/MOGAI"
+repo_id = "TRIG-bench/TRIG_multilingual_output_images"
 
-# # 远程仓库中的文件路径
-# path_in_repo = "output/t2i/sdxl.zip"
+# 远程仓库中的文件路径
+path_in_repo = "output/tr_ml/AnyText2.zip"
 
-# # 指定本地存储路径（可选）
-# local_file = hf_hub_download(
-#     repo_id=repo_id, 
-#     filename=path_in_repo, 
-#     repo_type="dataset",
-#     local_dir="/home/muzammal/Projects/TRIG/data/ouput"
-# )
+# 指定本地存储路径（可选）
+local_file = hf_hub_download(
+    repo_id=repo_id, 
+    filename=path_in_repo, 
+    repo_type="dataset",
+    local_dir="/home/muzammal/Projects/TRIG/data/"
+)
 
 # print(f"文件已下载到: {local_file}")
 

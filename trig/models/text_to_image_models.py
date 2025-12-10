@@ -349,6 +349,42 @@ class SD35Model(BaseModel):
         # 如果只生成一张图，返回单张图片；否则返回列表
         return images[0] if num_images_per_prompt == 1 else images
 
+class ZImageModel(BaseModel):
+    """
+    ZImage from Alibaba
+    https://huggingface.co/Tongyi-MAI/Z-Image-Turbo
+    """
+    def __init__(self):
+        super().__init__()
+        self.model_name = "ZImage"
+        self.default_model_id = "Tongyi-MAI/Z-Image-Turbo"
+        
+        # 加载配置文件
+        self.load_local_config()
+        
+        # 获取模型路径（配置文件或HuggingFace）
+        model_path = self.get_model_path(self.default_model_id, "ZIMAGE_MODEL_PATH")
+        
+        from diffusers import ZImagePipeline
+        self.pipe = ZImagePipeline.from_pretrained(
+            model_path,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=False,
+        )
+        self.pipe = self.pipe.to(device)
+
+    def generate(self, prompt, num_images_per_prompt=1):
+        images = self.pipe(
+            prompt=prompt,
+            height=1024,
+            width=1024,
+            num_inference_steps=9,  # This actually results in 8 DiT forwards
+            guidance_scale=0.0,     # Guidance should be 0 for the Turbo models
+            generator=torch.Generator(device="cuda").manual_seed(42)).images
+        
+        # 如果只生成一张图，返回单张图片；否则返回列表
+        return images[0] if num_images_per_prompt == 1 else images
+
 class JanusFlowModel(BaseModel):
     def __init__(self):
         super().__init__()

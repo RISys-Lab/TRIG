@@ -103,3 +103,5 @@ config/local_models.env
 leo.sh
 leo_ml.sh
 leo_eval.sh
+trig_multilingual/*.json
+trig_multilingual/flux

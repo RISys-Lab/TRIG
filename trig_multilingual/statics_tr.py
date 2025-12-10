@@ -67,13 +67,14 @@ from statistics import mean
 
 def main(records):
     # 只用 T5 tokenizer（t5-base / t5-xxl 都是同一个）
-    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("google/mt5-base")
 
     cls_token_lengths = defaultdict(list)
     all_token_lengths = []
     
-    # 收集所有主要 prompt 用于英文词汇统计
+    # 收集所有主要 prompt 用于英文词汇统计和token统计
     all_main_prompts = []
+    all_main_prompt_token_lengths = []
 
     for rec in records:
         prompt = get_prompt(rec)
@@ -82,8 +83,8 @@ def main(records):
         enc = tokenizer(
             prompt,
             truncation=False,   # 不截断
-            return_attention_mask=True,
-            add_special_tokens=True,
+            return_attention_mask=False,
+            add_special_tokens=False,
             padding=False
         )
         ids = enc["input_ids"]
@@ -97,6 +98,16 @@ def main(records):
         main_prompt = get_main_prompt(rec)
         if main_prompt:
             all_main_prompts.append(main_prompt)
+            # 对主要prompt进行token化
+            main_enc = tokenizer(
+                main_prompt,
+                truncation=False,
+                return_attention_mask=False,
+                add_special_tokens=False,
+                padding=False
+            )
+            main_tok_len = len(main_enc["input_ids"])
+            all_main_prompt_token_lengths.append(main_tok_len)
 
     print("=== 按 cls 的平均 token 数 (T5 tokenizer, 不截断) ===")
     for cls_name, lens in sorted(cls_token_lengths.items(), key=lambda x: x[0]):
@@ -107,14 +118,17 @@ def main(records):
     print()
     print(f"=== 全部样本的平均 token 数 ===\noverall_avg_tokens={overall_avg:.4f}")
     
-    # 对所有主要 prompt 进行英文词汇统计
+    # 对所有主要 prompt 进行英文词汇统计和token统计
     if all_main_prompts:
         avg_words, avg_chars = english_word_stats(all_main_prompts)
+        avg_main_tokens = mean(all_main_prompt_token_lengths) if all_main_prompt_token_lengths else 0.0
+        
         print()
         print("=== 所有 prompt 字段的英文词汇统计 ===")
         print(f"总样本数: {len(all_main_prompts)}")
         print(f"平均每个 prompt 的英文词数: {avg_words:.4f}")
         print(f"每个英文词的平均字符数: {avg_chars:.4f}")
+        print(f"平均每个 prompt 的 token 数: {avg_main_tokens:.4f}")
     else:
         print()
         print("=== 所有 prompt 字段的英文词汇统计 ===")

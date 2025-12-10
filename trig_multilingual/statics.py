@@ -63,7 +63,7 @@ from statistics import mean
 
 def main(records):
     # 只用 T5 tokenizer（t5-base / t5-xxl 都是同一个）
-    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("google/mt5-base")
 
     cls_token_lengths = defaultdict(list)
     all_token_lengths = []
@@ -75,8 +75,8 @@ def main(records):
         enc = tokenizer(
             prompt,
             truncation=False,   # 不截断
-            return_attention_mask=True,
-            add_special_tokens=True,
+            return_attention_mask=False,
+            add_special_tokens=False,
             padding=False
         )
         ids = enc["input_ids"]
