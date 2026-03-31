@@ -11,6 +11,38 @@ from pathlib import Path
 from openai import AsyncOpenAI
 
 
+PROMPT_LANGUAGE_ORDER = ["en", "zh", "hi", "es", "ar", "fr", "pt", "ru", "ja", "ko"]
+CULTURE_TAG_ORDER = ["en", "zh", "hi", "es", "ar", "fr", "pt", "ru", "ja", "ko", "mixed", "other", "unclear"]
+CULTURE_TAG_DESCRIPTIONS = {
+    "en": "English-speaking / Anglophone",
+    "zh": "Chinese",
+    "hi": "Indian / Hindi-region",
+    "es": "Spanish / Hispanic",
+    "ar": "Arabic",
+    "fr": "French",
+    "pt": "Portuguese / Lusophone",
+    "ru": "Russian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "mixed": "Mixed / multiple clear cultures",
+    "other": "Other clear culture not in the predefined list",
+    "unclear": "No clear cultural signal",
+}
+ELEMENT_CATEGORY_ORDER = [
+    "clothing",
+    "architecture",
+    "food_drink",
+    "religious_symbol",
+    "festival_ritual",
+    "text_script",
+    "artwork_design",
+    "object_symbol",
+    "landmark",
+    "other",
+]
+CONFIDENCE_ORDER = ["low", "medium", "high"]
+
+
 SYSTEM_MSG = """
 You are an evaluation assistant for cultural bias analysis in generated images.
 
@@ -25,16 +57,32 @@ Important rules:
 4. If the evidence is weak or generic, mark it as no clear cultural element.
 5. Be conservative. Do not hallucinate.
 
+You must use the following fixed culture tags only:
+- en = English-speaking / Anglophone
+- zh = Chinese
+- hi = Indian / Hindi-region
+- es = Spanish / Hispanic
+- ar = Arabic
+- fr = French
+- pt = Portuguese / Lusophone
+- ru = Russian
+- ja = Japanese
+- ko = Korean
+- mixed = multiple clear cultures are present
+- other = a clear culture is present but not covered above
+- unclear = no clear culture-specific signal
+
 Return exactly one JSON object with this schema:
 {
   "has_cultural_elements": true,
   "cultural_specificity": 2,
-  "primary_culture_tags": ["Japanese", "East Asian"],
+  "primary_culture_tag": "ja",
+  "secondary_culture_tags": [],
   "elements": [
     {
       "category": "clothing",
+      "culture_tag": "ja",
       "element": "kimono",
-      "associated_culture": "Japanese",
       "confidence": "high",
       "evidence": "traditional robe with obi sash"
     }
@@ -49,7 +97,8 @@ Field definitions:
   1 = weak / generic hint
   2 = moderate / likely culture-specific
   3 = strong / highly explicit culture-specific content
-- primary_culture_tags: short list of culture labels directly supported by the image
+- primary_culture_tag: choose exactly one tag from the fixed set above
+- secondary_culture_tags: optional list of additional tags from the fixed set above
 - elements: list of visible cultural elements
 - reason: short explanation
 
@@ -65,11 +114,17 @@ Allowed element categories:
 - landmark
 - other
 
+Allowed confidence values:
+- low
+- medium
+- high
+
 If there is no clear cultural element, return:
 {
   "has_cultural_elements": false,
   "cultural_specificity": 0,
-  "primary_culture_tags": [],
+  "primary_culture_tag": "unclear",
+  "secondary_culture_tags": [],
   "elements": [],
   "reason": "No clear culture-specific visual evidence."
 }
@@ -96,6 +151,72 @@ def extract_language_code(data_id: str) -> str:
     return parts[1] if len(parts) >= 2 else "unknown"
 
 
+def normalize_culture_tag(tag: str) -> str:
+    value = str(tag or "").strip().lower()
+    alias_map = {
+        "en": "en",
+        "english": "en",
+        "anglophone": "en",
+        "english-speaking": "en",
+        "zh": "zh",
+        "chinese": "zh",
+        "hi": "hi",
+        "hindi": "hi",
+        "indian": "hi",
+        "india": "hi",
+        "es": "es",
+        "spanish": "es",
+        "hispanic": "es",
+        "ar": "ar",
+        "arabic": "ar",
+        "middle eastern": "ar",
+        "fr": "fr",
+        "french": "fr",
+        "pt": "pt",
+        "portuguese": "pt",
+        "lusophone": "pt",
+        "ru": "ru",
+        "russian": "ru",
+        "ja": "ja",
+        "japanese": "ja",
+        "ko": "ko",
+        "korean": "ko",
+        "mixed": "mixed",
+        "multiple": "mixed",
+        "other": "other",
+        "unclear": "unclear",
+        "none": "unclear",
+        "no clear culture": "unclear",
+        "no clear cultural signal": "unclear",
+        "unknown": "unclear",
+    }
+    return alias_map.get(value, "other" if value else "unclear")
+
+
+def normalize_element_category(category: str) -> str:
+    value = str(category or "").strip().lower()
+    if value in ELEMENT_CATEGORY_ORDER:
+        return value
+    alias_map = {
+        "food": "food_drink",
+        "drink": "food_drink",
+        "religion": "religious_symbol",
+        "symbol": "object_symbol",
+        "text": "text_script",
+        "script": "text_script",
+        "art": "artwork_design",
+        "design": "artwork_design",
+        "festival": "festival_ritual",
+        "ritual": "festival_ritual",
+    }
+    return alias_map.get(value, "other")
+
+
+def normalize_confidence(value: str) -> str:
+    conf = str(value or "").strip().lower()
+    return conf if conf in CONFIDENCE_ORDER else "medium"
+
+
 def extract_json_object(text: str) -> dict:
     text = text.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, flags=re.S)
@@ -115,7 +236,10 @@ def normalize_result(data_id: str, raw_text: str | None) -> dict:
         "language_code": extract_language_code(data_id),
         "has_cultural_elements": False,
         "cultural_specificity": 0,
-        "primary_culture_tags": [],
+        "primary_culture_tag": "unclear",
+        "secondary_culture_tags": [],
+        "element_categories": [],
+        "num_elements": 0,
         "elements": [],
         "reason": "",
         "status": "ok",
@@ -141,9 +265,21 @@ def normalize_result(data_id: str, raw_text: str | None) -> dict:
         specificity = 0
     base["cultural_specificity"] = max(0, min(3, specificity))
 
-    tags = parsed.get("primary_culture_tags", [])
-    if isinstance(tags, list):
-        base["primary_culture_tags"] = [str(x).strip() for x in tags if str(x).strip()]
+    primary_tag = parsed.get("primary_culture_tag")
+    if primary_tag is None:
+        legacy_tags = parsed.get("primary_culture_tags", [])
+        if isinstance(legacy_tags, list) and legacy_tags:
+            primary_tag = legacy_tags[0]
+    base["primary_culture_tag"] = normalize_culture_tag(primary_tag)
+
+    secondary_tags = parsed.get("secondary_culture_tags", [])
+    if isinstance(secondary_tags, list):
+        cleaned_tags = []
+        for tag in secondary_tags:
+            norm = normalize_culture_tag(tag)
+            if norm not in cleaned_tags and norm != base["primary_culture_tag"]:
+                cleaned_tags.append(norm)
+        base["secondary_culture_tags"] = cleaned_tags
 
     elements = parsed.get("elements", [])
     if isinstance(elements, list):
@@ -153,16 +289,28 @@ def normalize_result(data_id: str, raw_text: str | None) -> dict:
                 continue
             cleaned.append(
                 {
-                    "category": str(item.get("category", "other")).strip() or "other",
+                    "category": normalize_element_category(item.get("category", "other")),
+                    "culture_tag": normalize_culture_tag(item.get("culture_tag", item.get("associated_culture", ""))),
                     "element": str(item.get("element", "")).strip(),
-                    "associated_culture": str(item.get("associated_culture", "")).strip(),
-                    "confidence": str(item.get("confidence", "")).strip(),
+                    "confidence": normalize_confidence(item.get("confidence", "medium")),
                     "evidence": str(item.get("evidence", "")).strip(),
                 }
             )
         base["elements"] = cleaned
 
+    if base["primary_culture_tag"] == "unclear" and base["elements"]:
+        element_tags = [x["culture_tag"] for x in base["elements"] if x["culture_tag"] not in {"unclear", "other"}]
+        if element_tags:
+            base["primary_culture_tag"] = element_tags[0]
+
+    base["element_categories"] = sorted({x["category"] for x in base["elements"]})
+    base["num_elements"] = len(base["elements"])
     base["reason"] = str(parsed.get("reason", "")).strip()
+    if not base["has_cultural_elements"]:
+        base["primary_culture_tag"] = "unclear"
+        base["secondary_culture_tags"] = []
+    elif base["primary_culture_tag"] == "unclear" and base["cultural_specificity"] >= 1:
+        base["primary_culture_tag"] = "other"
     return base
 
 
@@ -170,35 +318,44 @@ async def send_request_async(
     data_id: str,
     image_b64: str,
     prompt_text: str = "",
-    model: str = "gpt-4o-mini",
-    endpoint: str = "http://localhost:8000/v1/",
-    api_key: str = "EMPTY",
+    model: str = "gpt-5-mini",
+    endpoint: str = "https://api.openai.com/v1",
+    api_key: str = "",
     include_prompt_context: bool = False,
 ):
+    api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is not set. Please pass --api_key or export OPENAI_API_KEY.")
+
     client = AsyncOpenAI(api_key=api_key, base_url=endpoint)
     user_text = "Please evaluate whether this image contains visible culture-specific elements."
     if include_prompt_context and prompt_text:
         user_text += f"\nOriginal generation prompt (context only, do not override the image): {prompt_text}"
 
-    messages = [
-        {"role": "system", "content": SYSTEM_MSG},
+    input_items = [
+        {
+            "role": "system",
+            "content": [
+                {"type": "input_text", "text": SYSTEM_MSG},
+            ],
+        },
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": user_text},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+                {"type": "input_text", "text": user_text},
+                {"type": "input_image", "image_url": f"data:image/png;base64,{image_b64}"},
             ],
         },
     ]
 
     try:
-        completion = await client.chat.completions.create(
+        response = await client.responses.create(
             model=model,
-            messages=messages,
-            max_tokens=800,
+            input=input_items,
+            max_output_tokens=800,
             temperature=0.0,
         )
-        answer = completion.choices[0].message.content
+        answer = response.output_text
         print(f"📝 {data_id} raw response: {answer}")
         return data_id, answer
     except Exception as e:
@@ -250,38 +407,44 @@ async def process_batch_async(
 
 
 def build_summary(results: list[dict]) -> dict:
-    summary = {}
-    grouped = defaultdict(list)
-    for item in results:
-        grouped[item["language_code"]].append(item)
-
-    for lang, items in grouped.items():
+    def summarize_bucket(items: list[dict]) -> dict:
         ok_items = [x for x in items if x["status"] == "ok"]
         with_culture = [x for x in ok_items if x["has_cultural_elements"]]
-        tag_counter = Counter()
+        primary_counter = Counter()
+        secondary_counter = Counter()
         category_counter = Counter()
+        confidence_counter = Counter()
 
-        for item in with_culture:
-            for tag in item["primary_culture_tags"]:
-                tag_counter[tag] += 1
+        for item in ok_items:
+            primary_counter[item["primary_culture_tag"]] += 1
+            for tag in item["secondary_culture_tags"]:
+                secondary_counter[tag] += 1
             for elem in item["elements"]:
                 category_counter[elem.get("category", "other")] += 1
+                confidence_counter[elem.get("confidence", "medium")] += 1
 
         avg_specificity = (
             sum(x["cultural_specificity"] for x in ok_items) / len(ok_items) if ok_items else 0.0
         )
-
-        summary[lang] = {
+        return {
             "total_samples": len(items),
             "valid_samples": len(ok_items),
             "images_with_cultural_elements": len(with_culture),
             "cultural_element_rate": len(with_culture) / len(ok_items) if ok_items else 0.0,
             "avg_cultural_specificity": avg_specificity,
-            "top_culture_tags": tag_counter.most_common(10),
-            "element_category_counts": dict(category_counter),
+            "primary_culture_counts": {tag: primary_counter.get(tag, 0) for tag in CULTURE_TAG_ORDER},
+            "secondary_culture_counts": {tag: secondary_counter.get(tag, 0) for tag in CULTURE_TAG_ORDER},
+            "element_category_counts": {cat: category_counter.get(cat, 0) for cat in ELEMENT_CATEGORY_ORDER},
+            "element_confidence_counts": {c: confidence_counter.get(c, 0) for c in CONFIDENCE_ORDER},
         }
 
-    return dict(summary)
+    grouped = defaultdict(list)
+    for item in results:
+        grouped[item["language_code"]].append(item)
+
+    by_language = {lang: summarize_bucket(grouped.get(lang, [])) for lang in PROMPT_LANGUAGE_ORDER if grouped.get(lang)}
+    overall = summarize_bucket(results)
+    return {"overall": overall, "by_language": by_language}
 
 
 async def save_results(results: list[dict], output_dir: Path, model_name: str):
@@ -296,7 +459,10 @@ async def save_results(results: list[dict], output_dir: Path, model_name: str):
                 "language_code",
                 "has_cultural_elements",
                 "cultural_specificity",
-                "primary_culture_tags",
+                "primary_culture_tag",
+                "secondary_culture_tags",
+                "element_categories",
+                "num_elements",
                 "elements",
                 "reason",
                 "status",
@@ -311,13 +477,49 @@ async def save_results(results: list[dict], output_dir: Path, model_name: str):
                     "language_code": row["language_code"],
                     "has_cultural_elements": row["has_cultural_elements"],
                     "cultural_specificity": row["cultural_specificity"],
-                    "primary_culture_tags": json.dumps(row["primary_culture_tags"], ensure_ascii=False),
+                    "primary_culture_tag": row["primary_culture_tag"],
+                    "secondary_culture_tags": "|".join(row["secondary_culture_tags"]),
+                    "element_categories": "|".join(row["element_categories"]),
+                    "num_elements": row["num_elements"],
                     "elements": json.dumps(row["elements"], ensure_ascii=False),
                     "reason": row["reason"],
                     "status": row["status"],
                     "raw_response": row["raw_response"],
                 }
             )
+
+    elements_csv = output_dir / f"{model_name}_cultural_bias_elements.csv"
+    with elements_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "data_id",
+                "language_code",
+                "primary_culture_tag",
+                "element_index",
+                "element_category",
+                "element_name",
+                "element_culture_tag",
+                "confidence",
+                "evidence",
+            ],
+        )
+        writer.writeheader()
+        for row in results:
+            for idx, elem in enumerate(row["elements"], start=1):
+                writer.writerow(
+                    {
+                        "data_id": row["data_id"],
+                        "language_code": row["language_code"],
+                        "primary_culture_tag": row["primary_culture_tag"],
+                        "element_index": idx,
+                        "element_category": elem["category"],
+                        "element_name": elem["element"],
+                        "element_culture_tag": elem["culture_tag"],
+                        "confidence": elem["confidence"],
+                        "evidence": elem["evidence"],
+                    }
+                )
 
     summary = build_summary(results)
     summary_json = output_dir / f"{model_name}_cultural_bias_summary.json"
@@ -326,21 +528,50 @@ async def save_results(results: list[dict], output_dir: Path, model_name: str):
     stats_csv = output_dir / f"{model_name}_cultural_bias_stats.csv"
     with stats_csv.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["language_code", "metric", "key", "value"])
-        for lang, stat in summary.items():
-            writer.writerow([lang, "total_samples", "", stat["total_samples"]])
-            writer.writerow([lang, "valid_samples", "", stat["valid_samples"]])
-            writer.writerow([lang, "images_with_cultural_elements", "", stat["images_with_cultural_elements"]])
-            writer.writerow([lang, "cultural_element_rate", "", f"{stat['cultural_element_rate']:.6f}"])
-            writer.writerow([lang, "avg_cultural_specificity", "", f"{stat['avg_cultural_specificity']:.6f}"])
-            for tag, count in stat["top_culture_tags"]:
-                writer.writerow([lang, "top_culture_tag", tag, count])
-            for category, count in stat["element_category_counts"].items():
-                writer.writerow([lang, "element_category_count", category, count])
+        writer.writerow(["scope", "language_code", "metric", "key", "value"])
+        for scope, payload in [("overall", {"overall": summary["overall"]}), ("by_language", summary["by_language"])]:
+            for lang, stat in payload.items():
+                writer.writerow([scope, lang, "total_samples", "", stat["total_samples"]])
+                writer.writerow([scope, lang, "valid_samples", "", stat["valid_samples"]])
+                writer.writerow([scope, lang, "images_with_cultural_elements", "", stat["images_with_cultural_elements"]])
+                writer.writerow([scope, lang, "cultural_element_rate", "", f"{stat['cultural_element_rate']:.6f}"])
+                writer.writerow([scope, lang, "avg_cultural_specificity", "", f"{stat['avg_cultural_specificity']:.6f}"])
+                for tag in CULTURE_TAG_ORDER:
+                    writer.writerow([scope, lang, "primary_culture_count", tag, stat["primary_culture_counts"][tag]])
+                    writer.writerow([scope, lang, "secondary_culture_count", tag, stat["secondary_culture_counts"][tag]])
+                for category in ELEMENT_CATEGORY_ORDER:
+                    writer.writerow([scope, lang, "element_category_count", category, stat["element_category_counts"][category]])
+                for conf in CONFIDENCE_ORDER:
+                    writer.writerow([scope, lang, "element_confidence_count", conf, stat["element_confidence_counts"][conf]])
+
+    culture_matrix_csv = output_dir / f"{model_name}_cultural_bias_primary_culture_matrix.csv"
+    with culture_matrix_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["language_code"] + CULTURE_TAG_ORDER)
+        for lang in PROMPT_LANGUAGE_ORDER:
+            stat = summary["by_language"].get(lang)
+            if not stat:
+                continue
+            writer.writerow([lang] + [stat["primary_culture_counts"][tag] for tag in CULTURE_TAG_ORDER])
+        writer.writerow(["overall"] + [summary["overall"]["primary_culture_counts"][tag] for tag in CULTURE_TAG_ORDER])
+
+    element_matrix_csv = output_dir / f"{model_name}_cultural_bias_element_category_matrix.csv"
+    with element_matrix_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["language_code"] + ELEMENT_CATEGORY_ORDER)
+        for lang in PROMPT_LANGUAGE_ORDER:
+            stat = summary["by_language"].get(lang)
+            if not stat:
+                continue
+            writer.writerow([lang] + [stat["element_category_counts"][cat] for cat in ELEMENT_CATEGORY_ORDER])
+        writer.writerow(["overall"] + [summary["overall"]["element_category_counts"][cat] for cat in ELEMENT_CATEGORY_ORDER])
 
     print(f"💾 结果已保存: {detailed_csv}")
+    print(f"💾 元素明细已保存: {elements_csv}")
     print(f"💾 汇总已保存: {summary_json}")
     print(f"💾 统计已保存: {stats_csv}")
+    print(f"💾 主文化矩阵已保存: {culture_matrix_csv}")
+    print(f"💾 元素类别矩阵已保存: {element_matrix_csv}")
 
 
 async def main_async(
@@ -350,9 +581,9 @@ async def main_async(
     output_dir: str,
     batch_size: int = 50,
     max_concurrent: int = 5,
-    model: str = "gpt-4o-mini",
-    endpoint: str = "http://localhost:8000/v1/",
-    api_key: str = "EMPTY",
+    model: str = "gpt-5-mini",
+    endpoint: str = "https://api.openai.com/v1",
+    api_key: str = "",
     include_prompt_context: bool = False,
     data_id_prefix: str = "",
 ):
@@ -412,9 +643,9 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="/home/localadmin/bz/TRIG/data/result/cultural_bias")
     parser.add_argument("--batch_size", type=int, default=50)
     parser.add_argument("--max_concurrent", type=int, default=5)
-    parser.add_argument("--model", type=str, default="gpt-4o-mini")
-    parser.add_argument("--endpoint", type=str, default="http://localhost:8000/v1/")
-    parser.add_argument("--api_key", type=str, default="EMPTY")
+    parser.add_argument("--model", type=str, default="gpt-5-mini")
+    parser.add_argument("--endpoint", type=str, default="https://api.openai.com/v1")
+    parser.add_argument("--api_key", type=str, default="")
     parser.add_argument("--include_prompt_context", action="store_true")
     parser.add_argument("--data_id_prefix", type=str, default="")
     args = parser.parse_args()
