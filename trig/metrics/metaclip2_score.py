@@ -4,6 +4,11 @@ import math
 import numpy as np
 import torch
 from PIL import Image
+
+try:
+    from PIL import UnidentifiedImageError
+except ImportError:  # 极老版本 Pillow
+    UnidentifiedImageError = OSError  # type: ignore[misc, assignment]
 from transformers import AutoProcessor, AutoModel
 import csv   # 新增
 from tqdm import tqdm  # 新增进度条
@@ -27,7 +32,7 @@ def _load_image(path: str) -> Image.Image:
 class MetaCLIP2Embedder:
     def __init__(
         self,
-        model_name: str = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/metaclip-2-worldwide-huge-quickgelu",
+        model_name: str = "facebook/metaclip-2-worldwide-huge-quickgelu",
         device: str = "cuda",
         use_bf16: bool = True,
         trust_remote_code: bool = False,
@@ -117,9 +122,20 @@ def process_images_with_prompts_metaclip2(
     
     for i in pbar:
         batch = samples[i:i + batch_size]
-        images = [_load_image(x["img_path"]) for x in batch]
-        texts  = [x["prompt"] for x in batch]
-        ids    = [x["data_id"] for x in batch]
+        images: list[Image.Image] = []
+        texts: list[str] = []
+        ids: list = []
+        for x in batch:
+            try:
+                images.append(_load_image(x["img_path"]))
+                texts.append(x["prompt"])
+                ids.append(x["data_id"])
+            except (UnidentifiedImageError, OSError, ValueError) as e:
+                print(f"[warn] skip unreadable image {x['img_path']}: {e}")
+
+        if not images:
+            pbar.set_postfix({"batch": f"{(i // batch_size) + 1}/{num_batches}", "samples": 0})
+            continue
 
         img_feats, txt_feats = embedder.encode_batch(images, texts)
         img_feats = _l2_normalize(img_feats, axis=1, eps=1e-12)
@@ -134,7 +150,7 @@ def process_images_with_prompts_metaclip2(
         # 更新进度条描述信息
         pbar.set_postfix({
             'batch': f"{(i // batch_size) + 1}/{num_batches}",
-            'samples': len(batch),
+            'samples': len(images),
         })
 
     return results
@@ -143,8 +159,8 @@ def process_images_with_prompts_metaclip2(
 # 示例入口
 # ----------------------------
 if __name__ == "__main__":
-    image_folder = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/tr_ml/flux"
-    json_path = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/dataset/TRIG-multilingual/trig_multilingual_tr.json"
+    image_folder = "/home/localadmin/bz/TRIG/data/output/t2i_ml/omnidiffusion"
+    json_path = "/home/localadmin/bz/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json"
 
     scores = process_images_with_prompts_metaclip2(
         image_folder=image_folder,
@@ -156,7 +172,9 @@ if __name__ == "__main__":
     )
 
     # 保存到 CSV：第一列 id，第二列 score（四位小数）
-    with open("/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/result/metaclipscore_tr/metaclip2_flux.csv", "w", newline="", encoding="utf-8") as f:
+    out_csv = "/home/localadmin/bz/TRIG/data/result/metaclipscore_tr/metaclip2_omnidiffusion.csv"
+    os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+    with open(out_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["data_id", "score"])  # 表头
         for did, sc in scores.items():
