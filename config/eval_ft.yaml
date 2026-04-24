@@ -1,6 +1,9 @@
 name: "flux_ft"
 task: "t2i"
-prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-text-to-image/text-to-image-test.json"
+dataset_name: "RISys-Lab/TRIG"
+
+# legacy JSON is also supported
+# prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-text-to-image/text-to-image-test.json"
 
 evaluation:
     image_dirs: ["/home/muzammal/Projects/TRIG/data/output/t2i/flux_ft",]

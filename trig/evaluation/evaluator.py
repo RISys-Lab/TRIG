@@ -7,7 +7,14 @@ import json
 from natsort import natsorted
 from trig.metrics import import_metric
 from tqdm import tqdm
+from datasets import load_dataset
 project_root = Path(__file__).resolve().parents[2]
+
+TASK_TO_HF_SPLIT = {
+    "t2i": "text_to_image",
+    "p2p": "image_editing",
+    "s2p": "subject_driven",
+}
 
 
 class Evaluator:
@@ -22,9 +29,20 @@ class Evaluator:
             return yaml.safe_load(f)
 
     def load_prompts(self):
-        prompt_path = self.config["prompt_path"]
-        with open(prompt_path, "r") as f:
-            data = json.load(f)
+        if "dataset_name" in self.config:
+            task = self.config["task"]
+            if task not in TASK_TO_HF_SPLIT:
+                raise ValueError(f"Unsupported Hugging Face dataset task: {task}")
+
+            dataset_name = self.config["dataset_name"]
+            split = TASK_TO_HF_SPLIT[task]
+            print(f"Loading prompts from Hugging Face: {dataset_name}, split={split}")
+            data = load_dataset(dataset_name, split=split)
+        else:
+            prompt_path = self.config["prompt_path"]
+            with open(prompt_path, "r") as f:
+                data = json.load(f)
+
         prompt_dic = {i['data_id']: {k: v for k, v in i.items()} for i in data}
         return prompt_dic
 
@@ -95,6 +113,8 @@ class Evaluator:
             
             if "image_path" in self.config:
                 promp_data["img_id"] = os.path.join(self.config["image_path"], promp_data["img_id"])
+            elif "image" in promp_data and promp_data["image"] is not None:
+                promp_data["img_id"] = promp_data["image"]
             grouped[combination].append(promp_data)
 
         return grouped

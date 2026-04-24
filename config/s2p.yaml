@@ -1,8 +1,10 @@
 name: "test"
 task: "s2p_dtm"
-# prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-text-to-image/text-to-imgae-without-m-e-v8.json"
-prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/s2p_without_t.json"
-image_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/images_right_half"
+dataset_name: "RISys-Lab/TRIG"
+
+# legacy JSON is also supported
+# prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/s2p.json"
+# image_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/images"
 
 
 generation:

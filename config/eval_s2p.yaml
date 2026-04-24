@@ -1,9 +1,10 @@
 name: "s2p"
 task: "s2p"
-# prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/s2p_without_t.json"
-# image_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/images_right_half"
-prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/s2p_t.json"
-image_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/toxicity_images"
+dataset_name: "RISys-Lab/TRIG"
+
+# legacy JSON is also supported
+# prompt_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/s2p.json"
+# image_path: "/home/muzammal/Projects/TRIG/dataset/Trig/Trig-subject-driven/images"
 
 evaluation:
     image_dirs: ["/home/muzammal/Projects/TRIG/data/output/s2p_dtm/xflux_dtm_dim",]
@@ -24,8 +25,8 @@ TRIG_metric_72B: &TRIG_metric_72B
 
 TRIG_metric_GPT: &TRIG_metric_GPT
   name: trig_api
-  API_KEY: "sk-mqUwZI8bhIv746rG6f3fE830D8B146E789Fd11717aD8C4B1"
-  endpoint: "https://api.bltcy.ai/v1"
+  API_KEY: "your_api_key"
+  endpoint: "https://api.openai.com/v1"
   model_name: gpt-4o
   top_logprobs: 5
 

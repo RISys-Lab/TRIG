@@ -1,8 +1,12 @@
 name: "default" # experiment name
 task: "t2i" # "t2i" for text-to-image, "p2p" for image-editing, "s2p" for subject-driven
 
-# if cannot access HF dataset, use json file like this
-# prompt_path: "/path/to/text-to-imgae.json" # path to the prompt file
+# load prompts from the Hugging Face dataset by default
+dataset_name: "RISys-Lab/TRIG"
+
+# legacy JSON is also supported for generation and evaluation
+# prompt_path: "/path/to/text-to-image.json"
+# image_path: "/path/to/source/images" # required only for JSON p2p/s2p
 
 generation:
     # t2i models: ["dalle3", "sdxl", "omnigen", "pixart_sigma", "onediffusion", "sana", "sd35", 'flux']
@@ -33,7 +37,7 @@ dimensions:
   AL-v0:
     metrics:
       # 1. metrics with parameters
-      - <<: *TRIG_metric_72B
+      - <<: *TRIG_metric_GPT
 
       # 2. metrics with parameters (another example)
       # - name: trig_api
@@ -50,34 +54,34 @@ dimensions:
 
   # IQ-R:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # IQ-O:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # IQ-A:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # TA-R:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # TA-C:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # TA-S:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # D-K:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # D-A:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # R-T:
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
   # R-B:  
   #   metrics:
-  #     - <<: *TRIG_metric_72B
+  #     - <<: *TRIG_metric_GPT
 
 relation:
   models: ["flux"]

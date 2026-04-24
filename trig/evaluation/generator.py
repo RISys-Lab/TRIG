@@ -14,6 +14,15 @@ project_root = Path(__file__).resolve().parents[2]
 
 # export PYTHONPATH=/home/muzammal/Projects/TRIG:$PYTHONPATH
 
+TASK_TO_HF_SPLIT = {
+    "t2i": "text_to_image",
+    "p2p": "image_editing",
+    "s2p": "subject_driven",
+    "t2i_dtm": "text_to_image",
+    "p2p_dtm": "image_editing",
+    "s2p_dtm": "subject_driven",
+}
+
 class Generator:
     def __init__(self, config_path="config/default.yaml"):
         self.config = load_config(config_path)
@@ -47,13 +56,14 @@ class Generator:
 
             return prompts_data
         else:
-            split_dir = {
-                "t2i": "text_to_image",
-                "p2p": "image_editing",
-                "s2p": "subject_driven",
-            }
-            print("Loading dataset from Hugging Face, task: ", split_dir[self.config["task"]])
-            prompts_data = load_dataset("TRIG-bench/TRIG", split=split_dir[self.config["task"]])
+            task = self.config["task"]
+            if task not in TASK_TO_HF_SPLIT:
+                raise ValueError(f"Unsupported Hugging Face dataset task: {task}")
+
+            dataset_name = self.config.get("dataset_name", "RISys-Lab/TRIG")
+            split = TASK_TO_HF_SPLIT[task]
+            print(f"Loading dataset from Hugging Face: {dataset_name}, split={split}")
+            prompts_data = load_dataset(dataset_name, split=split)
             print("Dataset loaded")
             return prompts_data
     
