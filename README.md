@@ -2,19 +2,31 @@
 [![paper](https://img.shields.io/badge/cs.CV-2507.22100-b31b1b?logo=arxiv&logoColor=red)](https://arxiv.org/abs/2507.22100)
 [![Benchmark](https://img.shields.io/badge/Dataset-TRIGv1-orange)](https://huggingface.co/datasets/RISys-Lab/TRIG)
 [![Collection](https://img.shields.io/badge/Collection-HF-blue)](https://huggingface.co/collections/RISys-Lab/trig-benchmark)
+
 Trade-offs and Relationships in Image Generation: How Do Different Evaluation Dimensions Interact?
 
 ## TODO
 
 1. [x] Release the TRIG dataset and evaluation pipeline.
 2. [x] Release the Finetune pipeline and experiments.
-3. [] Release the Multilingual Evaluation Benchmark.
+3. [ ] Release the Multilingual Evaluation Benchmark.
 
 ## Quick Start
-### Benchmark
+### TRIG Benchmark
+Load from [Huggingface](https://huggingface.co/datasets/RISys-Lab/TRIG).
 ```python
-import sss
+from datasets import load_dataset
+
+ds_t2i = load_dataset("RISys-Lab/TRIG", split="text_to_image")
+ds_p2p = load_dataset("RISys-Lab/TRIG", split="image_editing")
+ds_s2p = load_dataset("RISys-Lab/TRIG", split="subject_driven")
+
+sample = ds_t2i[0]
+prompt = sample["prompt"]  # taken from one TRIG sample
+dimensions = sample["dimensions"]  # e.g. ["IQ-R", "IQ-A"]
+# Generation and Evaluation
 ```
+### TRIG-Multilingual Benchmark
 
 ## Setup
 ### Installation
