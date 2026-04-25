@@ -99,4 +99,94 @@ python flux.py --data_file /path/to/trig_multilingual_tr.json --start_idx 0 --en
 
 ## Evaluation
 
-Evaluation scripts such as `trig_ml_ocr.py`, `trig_ml_bias.py`, and `trig_ml_nsfw.py` still contain legacy JSON loading paths. They are intentionally left for a later pass; this update only normalizes generation.
+### Content Generation
+
+Content-generation evaluation uses MetaCLIP2/CLIPScore in `trig/metrics/metaclip2_score.py`.
+
+The script loads generated images by `data_id` from an image folder, pairs each image with the multilingual prompt, encodes both sides with `facebook/metaclip-2-worldwide-huge-quickgelu`, and writes one score per sample. The score is computed from the normalized image/text embedding similarity:
+
+```text
+score = 2.5 * max(cosine_similarity(image, text), 0)
+```
+
+The current metric helper is still JSON-based, so use the legacy JSON from the Hugging Face dataset `raw/` folder when scoring generated images:
+
+```bash
+python - <<'PY'
+import csv
+import os
+from trig.metrics.metaclip2_score import process_images_with_prompts_metaclip2
+
+image_folder = "/home/localadmin/bz/TRIG/data/output/t2i_ml/zimage"
+json_path = "/home/localadmin/bz/TRIG/data/output/hf_reformat/TRIG-multilingual/raw/text-to-image-multilingual.json"
+out_csv = "/home/localadmin/bz/TRIG/data/result/metaclipscore_tr/metaclip2_zimage.csv"
+
+scores = process_images_with_prompts_metaclip2(
+    image_folder=image_folder,
+    json_path=json_path,
+    batch_size=64,
+    device="cuda",
+)
+
+os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+with open(out_csv, "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(["data_id", "score"])
+    for data_id, score in scores.items():
+        writer.writerow([data_id, f"{score:.4f}"])
+PY
+```
+
+### Text Rendering
+
+Text-rendering evaluation is OCR-first. The main entry point is `trig_ml_ocr.py`; it reads the TR JSON metadata, finds generated images by language and `data_id`, runs OCR, then computes recognition metrics against the ground-truth render text.
+
+Expected generated-image layout:
+
+```text
+MODEL_OUTPUT_DIR/
+  ar/
+    123.png
+  zh/
+    456.png
+```
+
+Run OCR and metrics:
+
+```bash
+python trig_ml_ocr.py \
+  --model_path /data/experiments/TRIGv1.5/output/tr_ml/EasyText \
+  --trig_json /home/localadmin/bz/TRIG/data/output/hf_reformat/TRIG-multilingual/raw/trig_multilingual_tr.json \
+  --ocr_mode gemini \
+  --use_position \
+  --output_file results.json
+```
+
+`--ocr_mode local` uses the local OCR recognizer and dictionary files under `eval_ocr/ocr_recog`; `--ocr_mode gemini` uses the Gemini OCR wrapper. `--use_position` crops text regions from the render layout before OCR, which is useful for placement-aware text-rendering models.
+
+The output is saved inside `--model_path` with the OCR mode and parallel suffix, for example `results_gemini_parallel10.json`. The JSON contains `overall`, `by_language`, and per-sample `detailed_results`.
+
+Metrics:
+
+- `character_ned`: character-level normalized edit distance score.
+- `token_ned`: token-level normalized edit distance score using the mT5 tokenizer.
+- `sentence_accuracy`: exact sentence match after OCR.
+- `word_accuracy`: word-level accuracy.
+- `trig_score`: `0.4 * character_ned + 0.4 * token_ned + 0.2 * sentence_accuracy`.
+
+If OCR results already exist and only the metrics need to be recalculated:
+
+```bash
+python trig_ml_ocr.py \
+  --skip_ocr \
+  --results_file /data/experiments/TRIGv1.5/output/tr_ml/EasyText/results_gemini_parallel10.json
+```
+
+To export a compact per-language summary, use `avg_precision.py`. It averages `character_ned`, `token_ned`, and `sentence_accuracy` for each language and writes a `.txt` file next to the result JSON:
+
+```bash
+python avg_precision.py /data/experiments/TRIGv1.5/output/tr_ml/EasyText/results_gemini_parallel10.json
+```
+
+> [!NOTE]
+> Evaluation is still using the legacy JSON readers. The JSON files are available in the Hugging Face dataset's `raw/` folder; generation uses parquet by default.
