@@ -1,9 +1,11 @@
-# TRIG
+# TRIG: Trade-offs in Image Generation
 [![paper](https://img.shields.io/badge/cs.CV-2507.22100-b31b1b?logo=arxiv&logoColor=red)](https://arxiv.org/abs/2507.22100)
-[![Benchmark](https://img.shields.io/badge/Dataset-TRIGv1-orange)](https://huggingface.co/datasets/RISys-Lab/TRIG)
+[![Benchmark](https://img.shields.io/badge/Dataset-TRIG-orange)](https://huggingface.co/datasets/RISys-Lab/TRIG)
 [![Collection](https://img.shields.io/badge/Collection-HF-blue)](https://huggingface.co/collections/RISys-Lab/trig-benchmark)
 
-Trade-offs and Relationships in Image Generation: How Do Different Evaluation Dimensions Interact?
+Trade-offs and Relationships in Image Generation: How Do Different Evaluation Dimensions Interact? (ICCV 2025)
+
+For the new multilingual benchmark, please check the [TRIG-Multilingual Folder](./trig_multilingual).
 
 ## TODO
 
@@ -13,7 +15,9 @@ Trade-offs and Relationships in Image Generation: How Do Different Evaluation Di
 
 ## Quick Start
 ### TRIG Benchmark
-Load from [Huggingface](https://huggingface.co/datasets/RISys-Lab/TRIG).
+Load from [🤗 Huggingface Link](https://huggingface.co/datasets/RISys-Lab/TRIG).
+> [!NOTE]
+> Legacy JSON is still supported for local experiments. The JSON files are kept in the Hugging Face dataset under `raw/`; use the `--data_file /path/to/file.json` argument in generation scripts when you need to bypass the parquet dataset.
 ```python
 from datasets import load_dataset
 
@@ -21,12 +25,32 @@ ds_t2i = load_dataset("RISys-Lab/TRIG", split="text_to_image")
 ds_p2p = load_dataset("RISys-Lab/TRIG", split="image_editing")
 ds_s2p = load_dataset("RISys-Lab/TRIG", split="subject_driven")
 
-sample = ds_t2i[0]
-prompt = sample["prompt"]  # taken from one TRIG sample
-dimensions = sample["dimensions"]  # e.g. ["IQ-R", "IQ-A"]
+sample = ds_t2i[0] # keys: (data_id, item, prompt, dimension_prompt, parent dataset, img_id, dimensions, image)
 # Generation and Evaluation
 ```
 ### TRIG-Multilingual Benchmark
+Load from [🤗 Huggingface Link](https://huggingface.co/datasets/RISys-Lab/TRIG-Multilingual).
+
+
+```python
+from datasets import load_dataset
+
+ds_cg = load_dataset("RISys-Lab/TRIG-Multilingual", split="content_generation")
+ds_tr = load_dataset("RISys-Lab/TRIG-Multilingual", split="text_rendering")
+
+sample_cg = ds_cg[0]
+sample_tr = ds_tr[0]
+
+print(sample_cg["prompt"], sample_cg["dimension"], sample_cg["lang"])
+print(sample_tr["prompt"], sample_tr["render_text"], sample_tr["condition_image"])
+```
+
+Generation currently follows two paths:
+
+- `content_generation` uses the standard TRIG text-to-image generation logic. For the multilingual FLUX adapter, see `trig_multilingual/pea.py`.
+- `text_rendering` uses the scripts in `trig_multilingual/`. These read `render_text`, `render_layout`, and the embedded `condition_image` from parquet. Legacy JSON input is still available through `--data_file`, but parquet is the default.
+
+Evaluation for multilingual text rendering is still being migrated; this pass only updates generation.
 
 ## Setup
 ### Installation
@@ -115,8 +139,7 @@ python main.py --config your_config.yaml
 - Generated images will be saved to ```data/output/your_task/your_model/```
 - Evaluation result will be saved to ```data/output/your_task/your_model.json```
 - Relation result will be saved to ```data/output/your_model/```
-4. Notes:
-TBD
+
 
 ### Manual Evaluation by metrics toolkit
 All the metrics could be used **independently**. For example:

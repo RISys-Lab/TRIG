@@ -21,6 +21,7 @@ TASK_TO_HF_SPLIT = {
     "t2i_dtm": "text_to_image",
     "p2p_dtm": "image_editing",
     "s2p_dtm": "subject_driven",
+    "t2i_ml": "content_generation",
 }
 
 class Generator:

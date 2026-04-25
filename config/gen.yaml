@@ -1,7 +1,7 @@
 name: "test"
 task: "t2i_ml"
 
-prompt_path: "/home/muzammal/Projects/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json"
+dataset_name: "RISys-Lab/TRIG-Multilingual"
 start_idx: 0
 end_idx: 30000
 generation:
