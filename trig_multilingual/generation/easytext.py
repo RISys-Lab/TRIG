@@ -1,9 +1,14 @@
 import os
+import sys
 import argparse
 import json
 import tempfile
 from tqdm import tqdm
 from PIL import Image
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 import torch
 from EasyText.pipeline_pe_clone_multisample import FluxPipeline

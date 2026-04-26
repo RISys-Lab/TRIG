@@ -5,14 +5,15 @@ import numpy as np
 import argparse
 from PIL import ImageColor
 
-from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, load_text_rendering_data, save_condition_image
-
 # 添加AnyText2目录到Python路径，解决ldm模块导入问题
-current_dir = os.path.dirname(os.path.abspath(__file__))
-anytext2_dir = os.path.join(current_dir, 'AnyText2')
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+anytext2_dir = os.path.join(ROOT_DIR, 'AnyText2')
 if anytext2_dir not in sys.path:
     sys.path.insert(0, anytext2_dir)
 
+from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, load_text_rendering_data, save_condition_image
 from AnyText2.ms_wrapper import AnyText2Model
 
 
@@ -21,7 +22,7 @@ class TextGenerator:
                  use_fp16=True, use_translator=True):
         """初始化文字生成器"""
         # 构建字体文件路径
-        font_path = os.path.join(os.path.dirname(__file__), 'font', 'Arial_Unicode.ttf')
+        font_path = os.path.join(ROOT_DIR, 'font', 'Arial_Unicode.ttf')
         infer_params = {
             "use_fp16": use_fp16,
             "use_translator": use_translator,

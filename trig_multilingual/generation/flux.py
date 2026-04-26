@@ -1,14 +1,19 @@
-from diffusers import DiffusionPipeline
 import torch
+from diffusers import FluxPipeline
 import os
+import sys
 import argparse
 from tqdm import tqdm
 from PIL import Image
 
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, iter_range, load_text_rendering_data, replace_render_token
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Batch generate images using Qwen-Image model")
+    parser = argparse.ArgumentParser(description="Batch generate images using FLUX.1-dev model")
     parser.add_argument("--dataset_name", type=str, default=DEFAULT_DATASET,
                         help="Hugging Face dataset name or local dataset directory")
     parser.add_argument("--split", type=str, default=TEXT_RENDERING_SPLIT,
@@ -22,8 +27,8 @@ def parse_args():
     return parser.parse_args()
 
 # 配置
-OUTPUT_DIR = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/tr_ml/qwen_image"
-MODEL_NAME = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/Qwen-Image"
+OUTPUT_DIR = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/output/tr_ml/flux"
+MODEL_NAME = "/leonardo_work/EUHPC_R04_192/fmohamma/TRIG/data/FLUX.1-Krea-dev"
 
 def check_existing_image(data_id, output_dir):
     """检查图片是否已存在"""
@@ -33,37 +38,32 @@ def check_existing_image(data_id, output_dir):
 # 创建输出目录
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# 设备和数据类型配置
-if torch.cuda.is_available():
-    torch_dtype = torch.bfloat16
-    device = "cuda"
-    print(f"🚀 Using CUDA device: {torch.cuda.get_device_name()}")
-else:
-    torch_dtype = torch.float32
-    device = "cpu"
-    print("⚠️  Using CPU (will be slower)")
-
 # 加载模型
-print(f"📦 Loading model: {MODEL_NAME}")
-pipe = DiffusionPipeline.from_pretrained(MODEL_NAME, torch_dtype=torch_dtype)
-pipe = pipe.to(device)
-print("✅ Model loaded successfully")
+print(f"📦 Loading FLUX model: {MODEL_NAME}")
+print("⏳ This may take a few minutes for the first time...")
+
+pipe = FluxPipeline.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).to("cuda")
+
 
 
 def generate_image(prompt, data_id, output_dir):
     """生成单张图片"""
     try:
+        # FLUX推荐参数
         width, height = (1024, 1024)
+        guidance_scale = 3.5
+        num_inference_steps = 50
+        max_sequence_length = 512
         
         # 生成图像
         image = pipe(
-            prompt=prompt,
-            negative_prompt=" ",  # 推荐的空负面提示词
-            width=width,
+            prompt,
             height=height,
-            num_inference_steps=50,
-            true_cfg_scale=4.0,
-            generator=torch.Generator(device=device).manual_seed(42)
+            width=width,
+            guidance_scale=guidance_scale,
+            num_inference_steps=num_inference_steps,
+            max_sequence_length=max_sequence_length,
+            generator=torch.Generator("cuda").manual_seed(42)  # 使用CPU generator以保持一致性
         ).images[0]
         
         # 保存图像
@@ -79,6 +79,7 @@ def main():
     # 解析参数
     args = parse_args()
     
+    # 加载TRIG-Multilingual parquet数据
     data_list = load_text_rendering_data(args.dataset_name, args.split, args.data_file)
     
     print(f"📊 Loaded {len(data_list)} items from {args.data_file or args.dataset_name}:{args.split}")
@@ -97,11 +98,15 @@ def main():
     error_count = 0
     skipped_count = 0
     
-    for item in tqdm(data_subset, desc="🎨 Generating images"):
+    print(f"🎨 Starting FLUX image generation...")
+    print(f"⚙️  Parameters: 1024x1024, guidance_scale=3.5, steps=50")
+    
+    for item in tqdm(data_subset, desc="🎨 Generating FLUX images"):
         data_id = item["data_id"]
         prompt = item["prompt"]
         render_text = item.get("render_text")
         
+        # 检查是否跳过已存在的图片
         if check_existing_image(data_id, OUTPUT_DIR):
             skipped_count += 1
             continue
@@ -110,21 +115,19 @@ def main():
         
         # 生成图片
         success, result = generate_image(final_prompt, data_id, OUTPUT_DIR)
-        
         if success:
             success_count += 1
-            if success_count % 10 == 0:  # 每10张图片打印一次进度
-                print(f"✅ Generated {success_count} images. Latest: {data_id}")
         else:
             error_count += 1
             print(f"❌ Failed: {data_id} -> {result}")
-    
-    print(f"\n🎉 Generation completed!")
+        
+    print(f"\n🎉 FLUX Generation completed!")
     print(f"✅ Success: {success_count}")
     print(f"❌ Errors: {error_count}")
     print(f"⏭️  Skipped: {skipped_count}")
     print(f"📁 Output directory: {OUTPUT_DIR}")
     print(f"💾 Total images generated: {success_count} PNG files")
+    
 
 if __name__ == "__main__":
     main()

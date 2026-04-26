@@ -18,7 +18,9 @@ from multiprocessing import Pool, Manager
 import multiprocessing as mp
 
 # Add the current directory to Python path to ensure eval_ocr can be imported
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 # Import the original OCR evaluation utilities
 from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, load_text_rendering_data
@@ -512,7 +514,7 @@ def setup_ocr_recognizer(language='en', use_gemini=False):
     dict_file = language_dict_mapping.get(language, 'en_dict.txt')
     model_lang = model_lang_mapping.get(language, 'en')
     
-    rec_char_dict_path = os.path.join('/data/TRIG/trig_multilingual/eval_ocr/ocr_recog', dict_file)
+    rec_char_dict_path = os.path.join(ROOT_DIR, 'eval_ocr', 'ocr_recog', dict_file)
     
     # Setup modelscope OCR pipeline
     predictor = pipeline(Tasks.ocr_recognition, model='/data/model_zoo/cv_convnextTiny_ocr-recognition-general_damo')

@@ -3,8 +3,13 @@ from google.genai import types
 from PIL import Image
 from io import BytesIO
 import os
+import sys
 import argparse
 from tqdm import tqdm
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, iter_range, load_text_rendering_data, replace_render_token
 

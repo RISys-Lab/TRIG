@@ -10,7 +10,7 @@ Building on TRIG, TRIG-multilingual was further designed to evaluate the cross-l
 
 The dataset has two public splits:
 
-- `content_generation`: multilingual content prompts. This follows the normal TRIG text-to-image generation flow; `pea.py` is the multilingual adapter script in this folder.
+- `content_generation`: multilingual content prompts. This follows the normal TRIG text-to-image generation flow; `generation/pea.py` is the multilingual adapter script in this folder.
 - `text_rendering`: multilingual text-rendering prompts. These samples contain `render_text`, `render_layout`, and an embedded `condition_image` PIL image for placement-aware models.
 
 > [!NOTE]
@@ -19,13 +19,18 @@ The dataset has two public splits:
 
 ## Shared Loader
 
-All updated scripts use `data.py`.
+All updated generation and evaluation scripts use `data.py`.
 
 - `load_text_rendering_data(...)` reads `text_rendering` and exposes legacy-compatible `dimension_prompt = [render_text, render_layout]`.
 - `load_content_generation_data(...)` reads `content_generation`.
 - `condition_image` is read directly from parquet. AnyText/AnyText2 materialize it to a cache path only because those APIs require a file path.
 
+## Folder Layout
 
+- `generation/`: runnable generation scripts for content generation and text rendering.
+- `evaluation/`: OCR, language statistics, safety, bias, and result aggregation scripts.
+- `tools/`: data-preparation and model-projection helper scripts.
+- `AnyText/`, `AnyText2/`, `EasyText/`, `eval_ocr/`, `font/`: model adapters and resources used by the generation/evaluation scripts.
 
 ## Usage
 
@@ -56,36 +61,36 @@ Internally, `t2i_ml` maps to the `content_generation` split and calls the normal
 ### Text Rendering
 | Script | Split | Model family | Placement input |
 | --- | --- | --- | --- |
-| `flux.py` | `text_rendering` | FLUX | prompt only |
-| `qwen.py` | `text_rendering` | Qwen-Image | prompt only |
-| `nano.py` | `text_rendering` | NanoBanana | prompt only |
-| `anytext.py` | `text_rendering` | AnyText | embedded `condition_image` materialized to path |
-| `anytext2.py` | `text_rendering` | AnyText2 | embedded `condition_image` materialized to path |
-| `easytext.py` | `text_rendering` | EasyText | embedded `condition_image` + `render_layout` |
-Text rendering uses the scripts in this folder and reads the `text_rendering` split by default.
+| `generation/flux.py` | `text_rendering` | FLUX | prompt only |
+| `generation/qwen.py` | `text_rendering` | Qwen-Image | prompt only |
+| `generation/nano.py` | `text_rendering` | NanoBanana | prompt only |
+| `generation/anytext.py` | `text_rendering` | AnyText | embedded `condition_image` materialized to path |
+| `generation/anytext2.py` | `text_rendering` | AnyText2 | embedded `condition_image` materialized to path |
+| `generation/easytext.py` | `text_rendering` | EasyText | embedded `condition_image` + `render_layout` |
+Text rendering uses the scripts in `generation/` and reads the `text_rendering` split by default.
 
 Prompt-only text-rendering models:
 
 ```bash
-python flux.py --start_idx 0 --end_idx 10
-python qwen.py --start_idx 0 --end_idx 10
-python seedream.py --start_idx 0 --end_idx 10
-python nano.py --start_idx 0 --end_idx 10
-python imagen4.py --start_idx 0 --end_idx 10
+python generation/flux.py --start_idx 0 --end_idx 10
+python generation/qwen.py --start_idx 0 --end_idx 10
+python generation/seedream.py --start_idx 0 --end_idx 10
+python generation/nano.py --start_idx 0 --end_idx 10
+python generation/imagen4.py --start_idx 0 --end_idx 10
 ```
 
 Placement-aware text-rendering models:
 
 ```bash
-python anytext.py --max_samples 10
-python anytext2.py
-python easytext.py --max_samples 10
+python generation/anytext.py --max_samples 10
+python generation/anytext2.py
+python generation/easytext.py --max_samples 10
 ```
 
 To use a local dataset checkout instead of the Hub:
 
 ```bash
-python flux.py \
+python generation/flux.py \
   --dataset_name /home/localadmin/bz/TRIG/data/output/hf_reformat/TRIG-multilingual \
   --start_idx 0 \
   --end_idx 10
@@ -94,7 +99,7 @@ python flux.py \
 To use the old JSON temporarily:
 
 ```bash
-python flux.py --data_file /path/to/trig_multilingual_tr.json --start_idx 0 --end_idx 10
+python generation/flux.py --data_file /path/to/trig_multilingual_tr.json --start_idx 0 --end_idx 10
 ```
 
 ## Evaluation
@@ -124,7 +129,7 @@ For local legacy JSON files, pass `--json_path /path/to/text-to-image-multilingu
 
 ### Text Rendering
 
-Text-rendering evaluation is OCR-first. The main entry point is `trig_ml_ocr.py`; it reads the `text_rendering` parquet split, finds generated images by language and `data_id`, runs OCR, then computes recognition metrics against the ground-truth render text.
+Text-rendering evaluation is OCR-first. The main entry point is `evaluation/trig_ml_ocr.py`; it reads the `text_rendering` parquet split, finds generated images by language and `data_id`, runs OCR, then computes recognition metrics against the ground-truth render text.
 
 Expected generated-image layout:
 
@@ -139,7 +144,7 @@ MODEL_OUTPUT_DIR/
 Run OCR and metrics:
 
 ```bash
-python trig_ml_ocr.py \
+python evaluation/trig_ml_ocr.py \
   --model_path /data/experiments/TRIGv1.5/output/tr_ml/EasyText \
   --dataset_name RISys-Lab/TRIG-Multilingual \
   --split text_rendering \
@@ -163,15 +168,15 @@ Metrics:
 If OCR results already exist and only the metrics need to be recalculated:
 
 ```bash
-python trig_ml_ocr.py \
+python evaluation/trig_ml_ocr.py \
   --skip_ocr \
   --results_file your_path/results_gemini_parallel10.json
 ```
 
-To export a compact per-language summary, use `avg_precision.py`. It averages `character_ned`, `token_ned`, and `sentence_accuracy` for each language and writes a `.txt` file next to the result JSON:
+To export a compact per-language summary, use `evaluation/avg_precision.py`. It averages `character_ned`, `token_ned`, and `sentence_accuracy` for each language and writes a `.txt` file next to the result JSON:
 
 ```bash
-python avg_precision.py  your_path/results_gemini_parallel10.json
+python evaluation/avg_precision.py your_path/results_gemini_parallel10.json
 ```
 
 > [!NOTE]

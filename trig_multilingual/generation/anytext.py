@@ -5,15 +5,16 @@ from tqdm import tqdm
 import cv2
 import numpy as np
 
-from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, load_text_rendering_data, save_condition_image
-
 # 添加 AnyText 目录到 Python 路径，确保 ModelScope 可以找到我们的模块
-current_dir = os.path.dirname(os.path.abspath(__file__))
-anytext_dir = os.path.join(current_dir, 'AnyText')
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+anytext_dir = os.path.join(ROOT_DIR, 'AnyText')
 if anytext_dir not in sys.path:
     sys.path.insert(0, anytext_dir)
 print(f"Added AnyText directory to Python path: {anytext_dir}")
 
+from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, load_text_rendering_data, save_condition_image
 from modelscope.pipelines import pipeline
 
 
@@ -103,7 +104,7 @@ def main():
     
     # 保存当前工作目录
     original_cwd = os.getcwd()
-    anytext_dir = os.path.join(original_cwd, 'AnyText')
+    anytext_dir = os.path.join(ROOT_DIR, 'AnyText')
     
     try:
         # 临时切换到 AnyText 目录，让 ModelScope 可以找到配置文件
