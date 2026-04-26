@@ -116,7 +116,7 @@ python ../trig/metrics/metaclip2_score.py \
   --image_folder /home/localadmin/bz/TRIG/data/output/t2i_ml/zimage \
   --dataset_name RISys-Lab/TRIG-Multilingual \
   --split content_generation \
-  --out_csv /home/localadmin/bz/TRIG/data/result/metaclipscore_tr/metaclip2_zimage.csv \
+  --out_csv your_path/metaclip2_zimage.csv \
   --batch_size 64
 ```
 
@@ -158,20 +158,20 @@ Metrics:
 - `token_ned`: token-level normalized edit distance score using the mT5 tokenizer.
 - `sentence_accuracy`: exact sentence match after OCR.
 - `word_accuracy`: word-level accuracy.
-- `trig_score`: `0.4 * character_ned + 0.4 * token_ned + 0.2 * sentence_accuracy`.
+- `avg_score`: `0.33 * character_ned + 0.33 * token_ned + 0.33 * sentence_accuracy`.
 
 If OCR results already exist and only the metrics need to be recalculated:
 
 ```bash
 python trig_ml_ocr.py \
   --skip_ocr \
-  --results_file /data/experiments/TRIGv1.5/output/tr_ml/EasyText/results_gemini_parallel10.json
+  --results_file your_path/results_gemini_parallel10.json
 ```
 
 To export a compact per-language summary, use `avg_precision.py`. It averages `character_ned`, `token_ned`, and `sentence_accuracy` for each language and writes a `.txt` file next to the result JSON:
 
 ```bash
-python avg_precision.py /data/experiments/TRIGv1.5/output/tr_ml/EasyText/results_gemini_parallel10.json
+python avg_precision.py  your_path/results_gemini_parallel10.json
 ```
 
 > [!NOTE]
