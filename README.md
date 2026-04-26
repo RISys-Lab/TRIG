@@ -41,8 +41,12 @@ ds_tr = load_dataset("RISys-Lab/TRIG-Multilingual", split="text_rendering")
 sample_cg = ds_cg[0]
 sample_tr = ds_tr[0]
 
-print(sample_cg["prompt"], sample_cg["dimension"], sample_cg["lang"])
-print(sample_tr["prompt"], sample_tr["render_text"], sample_tr["condition_image"])
+print(sample_cg["prompt"])
+print(sample_cg["dimension"], sample_cg["lang"])
+
+print(sample_tr["prompt"])
+print(sample_tr["render_text"])
+print(sample_tr["condition_image"])  # PIL.Image.Image for text placement
 ```
 
 Generation currently follows two paths:

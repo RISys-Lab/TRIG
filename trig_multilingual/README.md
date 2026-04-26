@@ -5,13 +5,32 @@ This folder contains the generation and evaluation scripts for the multilingual 
 Building on TRIG, TRIG-multilingual was further designed to evaluate the cross-lingual consistency of text generation across different languages, and a text rendering task was added to address multilingual characteristics.
 
 ## Dataset
-[🤗 RISys-Lab/TRIG-Multilingual](https://huggingface.co/datasets/RISys-Lab/TRIG-multilingual).
+[🤗 RISys-Lab/TRIG-Multilingual](https://huggingface.co/datasets/RISys-Lab/TRIG-multilingual)
 
 
 The dataset has two public splits:
 
 - `content_generation`: multilingual content prompts. This follows the normal TRIG text-to-image generation flow; `generation/pea.py` is the multilingual adapter script in this folder.
 - `text_rendering`: multilingual text-rendering prompts. These samples contain `render_text`, `render_layout`, and an embedded `condition_image` PIL image for placement-aware models.
+
+Load the parquet splits with Hugging Face Datasets:
+
+```python
+from datasets import load_dataset
+
+ds_cg = load_dataset("RISys-Lab/TRIG-Multilingual", split="content_generation")
+ds_tr = load_dataset("RISys-Lab/TRIG-Multilingual", split="text_rendering")
+
+sample_cg = ds_cg[0]
+sample_tr = ds_tr[0]
+
+print(sample_cg["prompt"])
+print(sample_cg["dimension"], sample_cg["lang"])
+
+print(sample_tr["prompt"])
+print(sample_tr["render_text"])
+print(sample_tr["condition_image"])  # PIL.Image.Image for text placement
+```
 
 > [!NOTE]
 > Legacy JSON is still supported with `--data_file path/to/trig_multilingual_tr.json` for generation scripts, but the default path is now the parquet dataset. If you need the old JSON files, download them from the Hugging Face dataset's `raw/` folder.
