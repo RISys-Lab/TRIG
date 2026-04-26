@@ -32,7 +32,7 @@ All updated generation and evaluation scripts use `data.py`.
 - `tools/`: data-preparation and model-projection helper scripts.
 - `AnyText/`, `AnyText2/`, `EasyText/`, `eval_ocr/`, `font/`: model adapters and resources used by the generation/evaluation scripts.
 
-## Usage
+## Generation
 
 ### Content Generation
 
@@ -106,7 +106,7 @@ python generation/flux.py --data_file /path/to/trig_multilingual_tr.json --start
 
 ### Content Generation
 
-Content-generation evaluation uses MetaCLIP2/CLIPScore in `trig/metrics/metaclip2_score.py`.
+Content-generation evaluation uses CLIPScore (with MetaCLIP2) in `trig/metrics/metaclip2_score.py`.
 
 The script loads generated images by `data_id` from an image folder, pairs each image with the multilingual prompt, encodes both sides with `facebook/metaclip-2-worldwide-huge-quickgelu`, and writes one score per sample. The score is computed from the normalized image/text embedding similarity:
 
@@ -145,7 +145,7 @@ Run OCR and metrics:
 
 ```bash
 python evaluation/trig_ml_ocr.py \
-  --model_path /data/experiments/TRIGv1.5/output/tr_ml/EasyText \
+  --model_path path/to/tr_ml/EasyText \
   --dataset_name RISys-Lab/TRIG-Multilingual \
   --split text_rendering \
   --ocr_mode gemini \
@@ -163,7 +163,7 @@ Metrics:
 - `token_ned`: token-level normalized edit distance score using the mT5 tokenizer.
 - `sentence_accuracy`: exact sentence match after OCR.
 - `word_accuracy`: word-level accuracy.
-- `avg_score`: `0.33 * character_ned + 0.33 * token_ned + 0.33 * sentence_accuracy`.
+- `avg_score`: `(character_ned + token_ned + sentence_accuracy) / 3`.
 
 If OCR results already exist and only the metrics need to be recalculated:
 
