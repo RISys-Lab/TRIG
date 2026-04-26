@@ -21,6 +21,7 @@ import multiprocessing as mp
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import the original OCR evaluation utilities
+from data import DEFAULT_DATASET, TEXT_RENDERING_SPLIT, load_text_rendering_data
 from eval_ocr.recognizer import TextRecognizer, crop_image
 from eval_ocr.gemini_ocr import GeminiOCRRecognizer, crop_image_for_gemini
 
@@ -444,20 +445,26 @@ def pre_process(img_list, shape):
     
     return numpy_list
 
-def load_trig_data(json_path):
-    """Load TRIGv1.5 dataset"""
-    print(f"Loading TRIGv1.5 dataset from {json_path}")
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+def load_trig_data(
+    dataset_name=DEFAULT_DATASET,
+    split=TEXT_RENDERING_SPLIT,
+    data_file=None,
+):
+    """Load TRIG-Multilingual text-rendering data from parquet or legacy JSON."""
+    if data_file:
+        print(f"Loading TRIG-Multilingual text-rendering data from JSON: {data_file}")
+    else:
+        print(f"Loading TRIG-Multilingual text-rendering data from dataset: {dataset_name}/{split}")
+    data = load_text_rendering_data(dataset_name=dataset_name, split=split, data_file=data_file)
     
     # Group by language and data_id
     grouped_data = defaultdict(dict)
     for item in data:
         data_id = item['data_id']
-        language = item['dimensions'][1]  # language code
-        text = item['dimension_prompt'][0]  # ground truth text
-        positions = item['dimension_prompt'][1]  # text positions
-        img_id = item['img_id']
+        language = item.get('lang') or item['dimensions'][1]  # language code
+        text = item.get('render_text') or item['dimension_prompt'][0]  # ground truth text
+        positions = item.get('render_layout') or item['dimension_prompt'][1]  # text positions
+        img_id = item.get('img_id')
         
         grouped_data[language][data_id] = {
             'text': text,
@@ -954,9 +961,15 @@ def parse_args():
     parser.add_argument('--model_path', type=str, 
                         default='/data/experiments/TRIGv1.5/output/tr_ml/EasyText',
                         help='Path to model output directory')
+    parser.add_argument('--dataset_name', type=str,
+                        default=DEFAULT_DATASET,
+                        help='Hugging Face dataset name or local dataset directory')
+    parser.add_argument('--split', type=str,
+                        default=TEXT_RENDERING_SPLIT,
+                        help='Dataset split to evaluate')
     parser.add_argument('--trig_json', type=str,
-                        default='/data/dataset_zoo/TRIGv1.5/trig_multilingual_tr.json',
-                        help='Path to TRIGv1.5 JSON file')
+                        default=None,
+                        help='Optional legacy TRIG JSON file. If set, this overrides --dataset_name/--split.')
     parser.add_argument('--output_file', type=str,
                         default='results.json',
                         help='Output results file name')
@@ -1015,7 +1028,10 @@ def main():
     
     # Normal OCR evaluation mode
     print(f"📂 Model path: {args.model_path}")
-    print(f"📄 TRIG JSON: {args.trig_json}")
+    if args.trig_json:
+        print(f"📄 Legacy TRIG JSON: {args.trig_json}")
+    else:
+        print(f"🤗 Dataset: {args.dataset_name}/{args.split}")
     print(f"🔧 OCR Mode: {'Gemini API' if args.ocr_mode == 'gemini' else 'Local Models'}")
     print(f"📍 Position Info: {'Enabled' if args.use_position else 'Disabled'}")
     
@@ -1030,7 +1046,11 @@ def main():
         print(f"🚀 Parallel processing enabled with {num_processes} processes")
     
     # Load TRIGv1.5 dataset
-    trig_data = load_trig_data(args.trig_json)
+    trig_data = load_trig_data(
+        dataset_name=args.dataset_name,
+        split=args.split,
+        data_file=args.trig_json,
+    )
     
     # Filter languages if specified
     if args.languages:

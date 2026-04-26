@@ -50,7 +50,7 @@ Generation currently follows two paths:
 - `content_generation` uses the standard TRIG text-to-image generation logic. For the multilingual FLUX adapter, see `trig_multilingual/pea.py`.
 - `text_rendering` uses the scripts in `trig_multilingual/`. These read `render_text`, `render_layout`, and the embedded `condition_image` from parquet. Legacy JSON input is still available through `--data_file`, but parquet is the default.
 
-Evaluation for multilingual text rendering is still being migrated; this pass only updates generation.
+Evaluation also loads the Hugging Face parquet splits by default. Content-generation scoring uses `trig/metrics/metaclip2_score.py` on the `content_generation` split, and multilingual text-rendering OCR evaluation uses `trig_multilingual/trig_ml_ocr.py` on the `text_rendering` split. Legacy JSON files remain available in the dataset `raw/` folder for fallback use.
 
 ## Setup
 ### Installation

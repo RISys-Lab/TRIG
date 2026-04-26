@@ -109,37 +109,22 @@ The script loads generated images by `data_id` from an image folder, pairs each 
 score = 2.5 * max(cosine_similarity(image, text), 0)
 ```
 
-The current metric helper is still JSON-based, so use the legacy JSON from the Hugging Face dataset `raw/` folder when scoring generated images:
+By default, the metric helper loads the `content_generation` parquet split directly from Hugging Face:
 
 ```bash
-python - <<'PY'
-import csv
-import os
-from trig.metrics.metaclip2_score import process_images_with_prompts_metaclip2
-
-image_folder = "/home/localadmin/bz/TRIG/data/output/t2i_ml/zimage"
-json_path = "/home/localadmin/bz/TRIG/data/output/hf_reformat/TRIG-multilingual/raw/text-to-image-multilingual.json"
-out_csv = "/home/localadmin/bz/TRIG/data/result/metaclipscore_tr/metaclip2_zimage.csv"
-
-scores = process_images_with_prompts_metaclip2(
-    image_folder=image_folder,
-    json_path=json_path,
-    batch_size=64,
-    device="cuda",
-)
-
-os.makedirs(os.path.dirname(out_csv), exist_ok=True)
-with open(out_csv, "w", newline="", encoding="utf-8") as f:
-    writer = csv.writer(f)
-    writer.writerow(["data_id", "score"])
-    for data_id, score in scores.items():
-        writer.writerow([data_id, f"{score:.4f}"])
-PY
+python ../trig/metrics/metaclip2_score.py \
+  --image_folder /home/localadmin/bz/TRIG/data/output/t2i_ml/zimage \
+  --dataset_name RISys-Lab/TRIG-Multilingual \
+  --split content_generation \
+  --out_csv /home/localadmin/bz/TRIG/data/result/metaclipscore_tr/metaclip2_zimage.csv \
+  --batch_size 64
 ```
+
+For local legacy JSON files, pass `--json_path /path/to/text-to-image-multilingual.json`.
 
 ### Text Rendering
 
-Text-rendering evaluation is OCR-first. The main entry point is `trig_ml_ocr.py`; it reads the TR JSON metadata, finds generated images by language and `data_id`, runs OCR, then computes recognition metrics against the ground-truth render text.
+Text-rendering evaluation is OCR-first. The main entry point is `trig_ml_ocr.py`; it reads the `text_rendering` parquet split, finds generated images by language and `data_id`, runs OCR, then computes recognition metrics against the ground-truth render text.
 
 Expected generated-image layout:
 
@@ -156,7 +141,8 @@ Run OCR and metrics:
 ```bash
 python trig_ml_ocr.py \
   --model_path /data/experiments/TRIGv1.5/output/tr_ml/EasyText \
-  --trig_json /home/localadmin/bz/TRIG/data/output/hf_reformat/TRIG-multilingual/raw/trig_multilingual_tr.json \
+  --dataset_name RISys-Lab/TRIG-Multilingual \
+  --split text_rendering \
   --ocr_mode gemini \
   --use_position \
   --output_file results.json
@@ -189,4 +175,4 @@ python avg_precision.py /data/experiments/TRIGv1.5/output/tr_ml/EasyText/results
 ```
 
 > [!NOTE]
-> Evaluation is still using the legacy JSON readers. The JSON files are available in the Hugging Face dataset's `raw/` folder; generation uses parquet by default.
+> Evaluation uses parquet by default. Legacy JSON is still supported with `--json_path` for content scoring and `--trig_json` for text-rendering OCR; those JSON files are available in the Hugging Face dataset's `raw/` folder.

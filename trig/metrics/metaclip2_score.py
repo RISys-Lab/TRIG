@@ -12,6 +12,11 @@ except ImportError:  # 极老版本 Pillow
 from transformers import AutoProcessor, AutoModel
 import csv   # 新增
 from tqdm import tqdm  # 新增进度条
+from datasets import load_dataset
+
+
+DEFAULT_DATASET = "RISys-Lab/TRIG-Multilingual"
+CONTENT_GENERATION_SPLIT = "content_generation"
 
 # ----------------------------
 # 工具函数
@@ -25,6 +30,23 @@ def _to_numpy(t: torch.Tensor) -> np.ndarray:
 
 def _load_image(path: str) -> Image.Image:
     return Image.open(path).convert("RGB")
+
+
+def _load_prompt_items(
+    json_path: str | None = None,
+    dataset_name: str = DEFAULT_DATASET,
+    split: str = CONTENT_GENERATION_SPLIT,
+) -> list[dict]:
+    if json_path:
+        with open(json_path, "r", encoding="utf-8") as f:
+            items = json.load(f)
+        print(f"[MetaCLIP2] loaded {len(items)} items from JSON: {json_path}")
+        return items
+
+    dataset = load_dataset(dataset_name, split=split)
+    items = [dict(row) for row in dataset]
+    print(f"[MetaCLIP2] loaded {len(items)} items from dataset: {dataset_name}/{split}")
+    return items
 
 # ----------------------------
 # MetaCLIP2Embedder 同前
@@ -85,21 +107,23 @@ class MetaCLIP2Embedder:
 # ----------------------------
 def process_images_with_prompts_metaclip2(
     image_folder: str,
-    json_path: str,
+    json_path: str | None = None,
+    dataset_name: str = DEFAULT_DATASET,
+    split: str = CONTENT_GENERATION_SPLIT,
     batch_size: int = 100,
     device: str = "cuda",
     use_bf16: bool = True,
     trust_remote_code: bool = False,
 ) -> dict:
-
-    with open(json_path, "r", encoding="utf-8") as f:
-        items = json.load(f)
-    print(f"[MetaCLIP2] loaded {len(items)} items")
+    items = _load_prompt_items(json_path=json_path, dataset_name=dataset_name, split=split)
 
     samples = []
     for it in items:
         data_id = it.get("data_id")
         prompt = it.get("prompt")
+        if data_id is None or prompt is None:
+            print(f"[warn] skip item without data_id/prompt: {it}")
+            continue
         img_path = os.path.join(image_folder, f"{data_id}.png")
         if os.path.exists(img_path):
             samples.append({"data_id": data_id, "prompt": prompt.replace("<sks1>", "some text"), "img_path": img_path})
@@ -159,20 +183,32 @@ def process_images_with_prompts_metaclip2(
 # 示例入口
 # ----------------------------
 if __name__ == "__main__":
-    image_folder = "/home/localadmin/bz/TRIG/data/output/t2i_ml/omnidiffusion"
-    json_path = "/home/localadmin/bz/TRIG/dataset/TRIG-multilingual/text-to-image-multilingual.json"
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Compute MetaCLIP2 scores for TRIG content-generation outputs.")
+    parser.add_argument("--image_folder", default="/home/localadmin/bz/TRIG/data/output/t2i_ml/omnidiffusion")
+    parser.add_argument("--dataset_name", default=DEFAULT_DATASET)
+    parser.add_argument("--split", default=CONTENT_GENERATION_SPLIT)
+    parser.add_argument("--json_path", default=None, help="Optional legacy JSON prompt file.")
+    parser.add_argument("--out_csv", default="/home/localadmin/bz/TRIG/data/result/metaclipscore_tr/metaclip2_omnidiffusion.csv")
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--trust_remote_code", action="store_true")
+    args = parser.parse_args()
 
     scores = process_images_with_prompts_metaclip2(
-        image_folder=image_folder,
-        json_path=json_path,
-        batch_size=64,
-        device="cuda",
+        image_folder=args.image_folder,
+        json_path=args.json_path,
+        dataset_name=args.dataset_name,
+        split=args.split,
+        batch_size=args.batch_size,
+        device=args.device,
         use_bf16=True,
-        trust_remote_code=False,
+        trust_remote_code=args.trust_remote_code,
     )
 
     # 保存到 CSV：第一列 id，第二列 score（四位小数）
-    out_csv = "/home/localadmin/bz/TRIG/data/result/metaclipscore_tr/metaclip2_omnidiffusion.csv"
+    out_csv = args.out_csv
     os.makedirs(os.path.dirname(out_csv), exist_ok=True)
     with open(out_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
