@@ -12,7 +12,7 @@ For this new multilingual benchmark, please check the [LingT2I (TRIG-Multilingua
 1. [x] Release the TRIG dataset and evaluation pipeline.
 2. [x] Release the Finetune pipeline and experiments.
 3. [x] Release the Multilingual Evaluation Benchmark.
-3. [] Release the LingT2I paper.
+3. [ ] Release the LingT2I paper.
 
 ## Quick Start
 ### TRIG Benchmark
