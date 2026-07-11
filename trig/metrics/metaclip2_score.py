@@ -28,6 +28,23 @@ def _l2_normalize(x: np.ndarray, axis=1, eps: float = 1e-12) -> np.ndarray:
 def _to_numpy(t: torch.Tensor) -> np.ndarray:
     return t.detach().cpu().float().numpy()
 
+
+def _feature_tensor(x):
+    if torch.is_tensor(x):
+        return x
+    for attr in ("image_embeds", "text_embeds", "pooler_output"):
+        val = getattr(x, attr, None)
+        if torch.is_tensor(val):
+            return val
+    val = getattr(x, "last_hidden_state", None)
+    if torch.is_tensor(val):
+        return val[:, 0]
+    if isinstance(x, (tuple, list)):
+        for val in x:
+            if torch.is_tensor(val):
+                return val
+    raise TypeError(f"cannot extract feature tensor from {type(x)!r}")
+
 def _load_image(path: str) -> Image.Image:
     return Image.open(path).convert("RGB")
 
@@ -87,18 +104,18 @@ class MetaCLIP2Embedder:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast_enabled):
                 img_inputs = self.processor(images=images, return_tensors="pt")
                 img_inputs = {k: v.to(self.device) for k, v in img_inputs.items()}
-                img_feats = self.model.get_image_features(**img_inputs)
+                img_feats = _feature_tensor(self.model.get_image_features(**img_inputs))
 
                 txt_inputs = self.processor(text=texts, padding=True, truncation=True, max_length=77, return_tensors="pt")
                 txt_inputs = {k: v.to(self.device) for k, v in txt_inputs.items()}
-                txt_feats = self.model.get_text_features(**txt_inputs)
+                txt_feats = _feature_tensor(self.model.get_text_features(**txt_inputs))
         else:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast_enabled):
                 inputs = self.processor(images=images, text=texts, padding=True, truncation=True, max_length=77, return_tensors="pt")
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 outputs = self.model(**inputs)
-                img_feats = outputs.image_embeds
-                txt_feats = outputs.text_embeds
+                img_feats = _feature_tensor(getattr(outputs, "image_embeds", outputs))
+                txt_feats = _feature_tensor(getattr(outputs, "text_embeds", outputs))
 
         return _to_numpy(img_feats), _to_numpy(txt_feats)
 

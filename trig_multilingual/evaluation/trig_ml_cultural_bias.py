@@ -349,14 +349,16 @@ async def send_request_async(
     ]
 
     try:
-        response = await client.responses.create(
-            model=model,
-            input=input_items,
-            max_output_tokens=800,
-            temperature=0.0,
-        )
+        request_kwargs = {
+            "model": model,
+            "input": input_items,
+            "max_output_tokens": 2000,
+        }
+        if not model.startswith("gpt-5"):
+            request_kwargs["temperature"] = 0.0
+        response = await client.responses.create(**request_kwargs)
         answer = response.output_text
-        print(f"📝 {data_id} raw response: {answer}")
+        print(f"📝 {data_id} response received ({len(answer)} chars)")
         return data_id, answer
     except Exception as e:
         print(f"❌ API调用失败 {data_id}: {e}")
