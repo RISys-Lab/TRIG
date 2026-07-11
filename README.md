@@ -3,15 +3,15 @@
 [![Benchmark](https://img.shields.io/badge/Dataset-TRIG-orange)](https://huggingface.co/datasets/RISys-Lab/TRIG)
 [![Collection](https://img.shields.io/badge/Collection-HF-blue)](https://huggingface.co/collections/RISys-Lab/trig-benchmark)
 
-Trade-offs and Relationships in Image Generation: How Do Different Evaluation Dimensions Interact? (ICCV 2025)
-
-For the new multilingual benchmark, please check the [TRIG-Multilingual Folder](./trig_multilingual).
+Trade-offs and Relationships in Image Generation: How Do Different Evaluation Dimensions Interact? (ICCV 2025)  
+On the Limitations of Cross-Lingual Consistency in Multilingual Text-to-image Generation. (ACM MM 2026)  
+For this new multilingual benchmark, please check the [TRIG-Multilingual Folder](./trig_multilingual) and [🤗 Huggingface Link](https://huggingface.co/datasets/RISys-Lab/TRIG-Multilingual).
 
 ## TODO
 
 1. [x] Release the TRIG dataset and evaluation pipeline.
 2. [x] Release the Finetune pipeline and experiments.
-3. [ ] Release the Multilingual Evaluation Benchmark.
+3. [x] Release the Multilingual Evaluation Benchmark.
 
 ## Quick Start
 ### TRIG Benchmark
