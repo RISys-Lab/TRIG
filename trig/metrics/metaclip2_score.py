@@ -15,7 +15,7 @@ from tqdm import tqdm  # 新增进度条
 from datasets import load_dataset
 
 
-DEFAULT_DATASET = "RISys-Lab/TRIG-Multilingual"
+DEFAULT_DATASET = "RISys-Lab/LingT2I"
 CONTENT_GENERATION_SPLIT = "content_generation"
 
 # ----------------------------

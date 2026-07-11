@@ -1,7 +1,7 @@
 name: "test"
 task: "t2i_ml"
 
-dataset_name: "RISys-Lab/TRIG-Multilingual"
+dataset_name: "RISys-Lab/LingT2I"
 start_idx: 0
 end_idx: 30000
 generation:

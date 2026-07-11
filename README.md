@@ -6,7 +6,7 @@
 - **Trade-offs and Relationships in Image Generation: How Do Different Evaluation Dimensions Interact? (ICCV 2025)**  
 For this TRIG benchmark, please check this main folder and [🤗 RISys-Lab/TRIG](https://huggingface.co/datasets/RISys-Lab/TRIG)
 - **LingT2I: On the Limitations of Cross-Lingual Consistency in Multilingual Text-to-image Generation. (ACM MM 2026)**  
-For this new multilingual benchmark, please check the [LingT2I Repository](https://github.com/RISys-Lab/LingT2I) and [🤗 RISys-Lab/TRIG-Multilingual](https://huggingface.co/datasets/RISys-Lab/TRIG-Multilingual).
+For this new multilingual benchmark, please check the [LingT2I Repository](https://github.com/RISys-Lab/LingT2I) and [🤗 RISys-Lab/LingT2I](https://huggingface.co/datasets/RISys-Lab/LingT2I).
 
 ## TODO
 
@@ -31,14 +31,14 @@ sample = ds_t2i[0] # keys: (data_id, item, prompt, dimension_prompt, parent data
 # Generation and Evaluation
 ```
 ### TRIG-Multilingual Benchmark
-Load from [🤗 Huggingface Link](https://huggingface.co/datasets/RISys-Lab/TRIG-Multilingual).
+Load from [🤗 Huggingface Link](https://huggingface.co/datasets/RISys-Lab/LingT2I).
 
 
 ```python
 from datasets import load_dataset
 
-ds_cg = load_dataset("RISys-Lab/TRIG-Multilingual", split="content_generation")
-ds_tr = load_dataset("RISys-Lab/TRIG-Multilingual", split="text_rendering")
+ds_cg = load_dataset("RISys-Lab/LingT2I", split="content_generation")
+ds_tr = load_dataset("RISys-Lab/LingT2I", split="text_rendering")
 
 sample_cg = ds_cg[0]
 sample_tr = ds_tr[0]

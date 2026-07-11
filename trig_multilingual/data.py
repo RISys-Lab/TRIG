@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from datasets import load_dataset
 
 
-DEFAULT_DATASET = "RISys-Lab/TRIG-Multilingual"
+DEFAULT_DATASET = "RISys-Lab/LingT2I"
 TEXT_RENDERING_SPLIT = "text_rendering"
 CONTENT_GENERATION_SPLIT = "content_generation"
 CONTENT_GENERATION_DATASET = "RISys-Lab/TRIG"

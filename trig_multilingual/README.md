@@ -5,7 +5,7 @@ This folder contains the generation and evaluation scripts for the multilingual 
 Building on TRIG, TRIG-multilingual was further designed to evaluate the cross-lingual consistency of text generation across different languages, and a text rendering task was added to address multilingual characteristics.
 
 ## Dataset
-[🤗 RISys-Lab/TRIG-Multilingual](https://huggingface.co/datasets/RISys-Lab/TRIG-multilingual)
+[🤗 RISys-Lab/LingT2I](https://huggingface.co/datasets/RISys-Lab/LingT2I)
 
 
 The dataset has two public splits:
@@ -18,8 +18,8 @@ Load the parquet splits with Hugging Face Datasets:
 ```python
 from datasets import load_dataset
 
-ds_cg = load_dataset("RISys-Lab/TRIG-Multilingual", split="content_generation")
-ds_tr = load_dataset("RISys-Lab/TRIG-Multilingual", split="text_rendering")
+ds_cg = load_dataset("RISys-Lab/LingT2I", split="content_generation")
+ds_tr = load_dataset("RISys-Lab/LingT2I", split="text_rendering")
 
 sample_cg = ds_cg[0]
 sample_tr = ds_tr[0]
@@ -60,7 +60,7 @@ Content generation uses the original TRIG YAML-driven generation pipeline. The m
 ```yaml
 name: "trig-multilingual-content"
 task: "t2i_ml"
-dataset_name: "RISys-Lab/TRIG-Multilingual"
+dataset_name: "RISys-Lab/LingT2I"
 
 start_idx: 0
 end_idx: 30000
@@ -138,7 +138,7 @@ By default, the metric helper loads the `content_generation` parquet split direc
 ```bash
 python ../trig/metrics/metaclip2_score.py \
   --image_folder /home/localadmin/bz/TRIG/data/output/t2i_ml/zimage \
-  --dataset_name RISys-Lab/TRIG-Multilingual \
+  --dataset_name RISys-Lab/LingT2I \
   --split content_generation \
   --out_csv your_path/metaclip2_zimage.csv \
   --batch_size 64
@@ -165,7 +165,7 @@ Run OCR and metrics:
 ```bash
 python evaluation/trig_ml_ocr.py \
   --model_path path/to/tr_ml/EasyText \
-  --dataset_name RISys-Lab/TRIG-Multilingual \
+  --dataset_name RISys-Lab/LingT2I \
   --split text_rendering \
   --ocr_mode gemini \
   --use_position \
