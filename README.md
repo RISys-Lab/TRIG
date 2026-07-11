@@ -4,14 +4,15 @@
 [![Collection](https://img.shields.io/badge/Collection-HF-blue)](https://huggingface.co/collections/RISys-Lab/trig-benchmark)
 
 Trade-offs and Relationships in Image Generation: How Do Different Evaluation Dimensions Interact? (ICCV 2025)  
-On the Limitations of Cross-Lingual Consistency in Multilingual Text-to-image Generation. (ACM MM 2026)  
-For this new multilingual benchmark, please check the [TRIG-Multilingual Folder](./trig_multilingual) and [🤗 Huggingface Link](https://huggingface.co/datasets/RISys-Lab/TRIG-Multilingual).
+LingT2I: On the Limitations of Cross-Lingual Consistency in Multilingual Text-to-image Generation. (ACM MM 2026)  
+For this new multilingual benchmark, please check the [LingT2I (TRIG-Multilingual) Folder](./trig_multilingual) and [🤗 Huggingface Link](https://huggingface.co/datasets/RISys-Lab/TRIG-Multilingual).
 
 ## TODO
 
 1. [x] Release the TRIG dataset and evaluation pipeline.
 2. [x] Release the Finetune pipeline and experiments.
 3. [x] Release the Multilingual Evaluation Benchmark.
+3. [] Release the LingT2I paper.
 
 ## Quick Start
 ### TRIG Benchmark
